@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Symphony Embedded Mode</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand" aria-label="Demo identity">
+        <div class="brand-mark">S</div>
+        <div>
+          <h1>Symphony Embedded Mode</h1>
+          <p>FDC3 Actions Demo</p>
+        </div>
+      </div>
+      <div class="status-bar" aria-live="polite">
+        <span class="pill"><span id="sdkDot" class="dot"></span><span id="sdkStatus">Setup required</span></span>
+      </div>
+    </header>
+
+    <main>
+      <section class="workspace" aria-label="Treasury exceptions">
+        <form id="configForm" class="config-strip">
+          <div class="field">
+            <label for="podUrl">Pod URL</label>
+            <input id="podUrl" name="podUrl" autocomplete="off" placeholder="company.symphony.com">
+          </div>
+          <div class="field">
+            <label for="partnerId">Partner ID</label>
+            <input id="partnerId" name="partnerId" autocomplete="off" placeholder="partner-id">
+          </div>
+          <div class="field">
+            <label for="streamId">Stream ID</label>
+            <input id="streamId" name="streamId" autocomplete="off" placeholder="active conversation stream" required>
+          </div>
+          <div class="field">
+            <label for="themeMode">Theme</label>
+            <select id="themeMode" name="themeMode">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="loginMode">Login</label>
+            <select id="loginMode" name="loginMode">
+              <option value="iframe">In-frame</option>
+              <option value="popup" selected>Popup</option>
+            </select>
+          </div>
+          <button id="loadChatButton" class="primary-action" type="submit">Load Chat</button>
+        </form>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Payment Exceptions</h2>
+          </div>
+          <div class="table-wrap">
+            <table aria-label="Payment exceptions that can be sent to Symphony">
+              <thead>
+                <tr>
+                  <th style="width: 14%;">Reference</th>
+                  <th style="width: 20%;">Counterparty</th>
+                  <th style="width: 16%;">Amount</th>
+                  <th style="width: 15%;">Cutoff</th>
+                  <th style="width: 12%;">Risk</th>
+                  <th style="width: 23%;">Required Action</th>
+                </tr>
+              </thead>
+              <tbody id="exceptionTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <aside class="right-rail" aria-label="Symphony chat">
+        <section class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Active Chat</h2>
+          </div>
+          <div class="chat-host">
+            <div id="ecp-chat" class="ecp-chat"></div>
+          </div>
+        </section>
+
+      </aside>
+
+      <section class="panel console-panel" aria-label="FDC3 notification console">
+        <div class="panel-header">
+          <h2 class="panel-title">FDC3 Notification Console</h2>
+          <button id="clearLogButton" class="secondary-action" type="button">Clear</button>
+        </div>
+        <div class="event-console">
+          <table class="event-table" aria-label="Expandable FDC3 notification events">
+            <thead>
+              <tr>
+                <th style="width: 44px;"></th>
+                <th style="width: 66px;">Copy</th>
+                <th style="width: 88px;">Level</th>
+                <th style="width: 210px;">Event</th>
+                <th style="width: 140px;">Time</th>
+                <th>Preview</th>
+              </tr>
+            </thead>
+            <tbody id="eventTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
