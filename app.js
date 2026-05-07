@@ -1,9 +1,7 @@
 import { EXCEPTIONS } from "./demo-data.js";
 import {
   buildSymphonyMessage,
-  buildSendOptions,
-  isMissingContainerError,
-  omitContainer
+  buildSendOptions
 } from "./message-builder.js";
 import {
   ensureSdkScript,
@@ -158,8 +156,7 @@ async function selectAndSend(row) {
   const payload = buildSymphonyMessage(row);
   const options = buildSendOptions({
     streamId: readConfig().streamId,
-    activeStreamId: state.activeStreamId,
-    containerSelector: CHAT_CONTAINER_SELECTOR
+    activeStreamId: state.activeStreamId
   });
   const preparedPayload = {
     messageId: payload.metadata.messageId,
@@ -190,16 +187,6 @@ async function sendWithSymphony(message, options) {
   try {
     const result = await window.symphony.sendMessage(message, options);
     if (result && result.error) {
-      if (isMissingContainerError(result.error) && options.container) {
-        logEvent("message.retrying", {
-          reason: result.error.message,
-          originalContainer: options.container,
-          fallback: "default Embedded Mode frame"
-        });
-        await sendWithSymphony(message, omitContainer(options));
-        return;
-      }
-
       logEvent("message.failed", result);
       return;
     }

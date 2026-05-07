@@ -59,10 +59,9 @@ export function buildSymphonyMessage(row) {
   };
 }
 
-export function buildSendOptions({ streamId, activeStreamId, containerSelector }) {
+export function buildSendOptions({ streamId, activeStreamId }) {
   const options = {
-    mode: "blast",
-    container: containerSelector
+    mode: "blast"
   };
 
   const resolvedStreamId = streamId || activeStreamId;
@@ -71,15 +70,6 @@ export function buildSendOptions({ streamId, activeStreamId, containerSelector }
   }
 
   return options;
-}
-
-export function isMissingContainerError(error) {
-  return Boolean(error && typeof error.message === "string" && error.message.includes("container does not exist"));
-}
-
-export function omitContainer(options) {
-  const { container, ...rest } = options;
-  return rest;
 }
 
 function buildActionId(messageId, action) {
