@@ -49,8 +49,8 @@ flowchart TD
 
 	H --> I[User clicks exception row]
 	I --> J[message-builder.js builds SharedMessage]
-	J --> J1[Markdown contains id/actionId links]
-	J --> J2[entities[actionId] are fdc3.fdc3Intent]
+	J --> J1[Markdown contains id slash actionId links]
+	J --> J2[Matching entity entries are fdc3.fdc3Intent]
 	J1 --> K[Send message with window.symphony.sendMessage]
 	J2 --> K
 	K --> L[Symphony renders FDC3 action buttons in chat]
@@ -62,7 +62,7 @@ flowchart TD
 
 	Q[Browser authenticated to Symphony pod] -. required .-> G
 	R[SDK exposes registerInterop] -. required for host callback .-> H
-	S[id/actionId must match entities[actionId]] -. required .-> L
+	S[Link ids must match entity ids] -. required .-> L
 ```
 
 ### 1. Initialize
