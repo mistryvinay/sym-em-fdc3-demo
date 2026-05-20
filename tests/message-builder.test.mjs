@@ -26,13 +26,18 @@ test("buildSymphonyMessage creates a wrapped structured object payload", () => {
     hostPage: "https://localhost:4000/index.html"
   });
   const entity = result.message.entities[result.metadata.entityId];
+  const messageText = result.message.text["text/markdown"];
 
   assert.equal(entity.type, "fdc3.symphonyEntity");
   assert.equal(entity.data.type, "com.mistryvinay.treasury.exception");
   assert.equal(entity.data.details.recommendedAction, sampleRow.action);
   assert.equal(entity.data.origin.hostMessageId, result.metadata.messageId);
   assert.equal(entity.data.origin.streamId, "stream-123");
-  assert.match(result.message.text["text/markdown"], /Structured object attached/);
+  assert.match(messageText, /^\*\*Treasury exception PAY-10482: Escalate to treasury ops\*\*/);
+  assert.match(messageText, /data-entity-id=/);
+  assert.match(messageText, /Structured object attached/);
+  assert.doesNotMatch(messageText, /Open the structured object card in Symphony/);
+  assert.doesNotMatch(messageText, /Acme Treasury \/ \$4,500,000/);
 });
 
 test("buildSymphonyBatchMessage preserves all rows and generates actions per item", () => {

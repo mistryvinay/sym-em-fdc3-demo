@@ -65,21 +65,7 @@ function buildStructuredObjectPlaceholder(entityId, data) {
 }
 
 function buildVisibleFallbackSummary(data) {
-  const items = Array.isArray(data.items) ? data.items : [];
-
-  if (items.length === 1) {
-    const item = items[0];
-    return [
-      `**${data.header.title}**`,
-      `${item.counterparty} / ${item.amount}`,
-      `Open the structured object card in Symphony to review and take action.`
-    ].join("\n");
-  }
-
-  return [
-    `**${data.header.title}**`,
-    `Open the structured object card in Symphony to review and take action.`
-  ].join("\n");
+  return `**${data.header.title}**`;
 }
 
 export function buildSendOptions({ streamId, activeStreamId }) {

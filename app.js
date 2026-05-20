@@ -533,7 +533,7 @@ async function pollAuditFeed(auditFeedUrl) {
   try {
     const response = await fetch(requestUrl.toString(), {
       method: "GET",
-      credentials: resolveAuditFeedCredentials(requestUrl),
+      credentials: resolveAuditFeedCredentials(requestUrl, EXTENSION_APP_ORIGIN),
       headers: {
         Accept: "application/json"
       }

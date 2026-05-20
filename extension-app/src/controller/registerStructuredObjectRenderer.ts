@@ -215,22 +215,16 @@ function renderTreasuryException(config: RuntimeConfig, entityData: StructuredOb
     };
   }
 
-  const header = getRecord(data.header);
   const entityId = readString(data.entityId) || readString(data.id) || null;
   const messageId = readString(data.messageId) || null;
   const origin = readOrigin(data.origin);
   const items = readStructuredItems(data);
-  const isBatch = items.length > 1;
-  const title = readString(header.title) || readString(data.name) || 'Treasury exception';
-  const subtitle = readString(header.subtitle) || `${items.length} item${items.length === 1 ? '' : 's'}`;
   const actions = buildRendererActions(data, items, entityId, messageId, origin);
 
   return {
     template: [
       '<entity>',
-      `<b>${escapeXml(title)}</b><br/>`,
-      `<span>${escapeXml(subtitle)}</span><br/>`,
-      isBatch ? renderBatchItems(items, data) : items.map((item) => renderItem(item, data)).join('<br/>'),
+      renderBatchItems(items, data),
       '</entity>',
     ].join(''),
     extraData: {
@@ -292,21 +286,6 @@ function renderBatchRow(item: StructuredObjectItem, data: StructuredObjectData):
       `<action id="${escapeXml(action.id)}" class="tk-button ${buttonClassForAction(action.type)} tk-button--small" />`
     )).join('')}</td>`,
     '</tr>',
-  ].join('');
-}
-
-function renderItem(item: StructuredObjectItem, data: StructuredObjectData): string {
-  const actions = readActionsForItem(data, item);
-
-  return [
-    `<span><b>${escapeXml(item.exceptionId)}: ${escapeXml(item.recommendedAction)}</b></span><br/>`,
-    `<span>${escapeXml(item.counterparty)} / ${escapeXml(item.amount)}</span><br/>`,
-    `<span>${escapeXml(item.reason)}</span><br/>`,
-    `<span><b>Cutoff</b>: ${escapeXml(item.cutoff)}</span><br/>`,
-    `<span><b>Risk</b>: ${escapeXml(item.risk)}</span><br/>`,
-    actions.map((action) => (
-      `<action id="${escapeXml(action.id)}" class="tk-button ${buttonClassForAction(action.type)} tk-button--small" />`
-    )).join(''),
   ].join('');
 }
 

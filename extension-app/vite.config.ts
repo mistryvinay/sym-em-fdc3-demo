@@ -8,6 +8,7 @@ import { defineConfig, type Plugin } from 'vite';
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 const AUDIT_ENDPOINT_PATH = '/audit';
 const AUDIT_FEED_PATH = '/audit-feed';
+const HOST_APP_ORIGIN = 'https://localhost:4000';
 
 type AuditEnvelope = Record<string, unknown>;
 type AuditFeedEntry = {
@@ -76,14 +77,14 @@ function installAuditApi(middlewares: MiddlewareStack): void {
 
     if (requestUrl.pathname === AUDIT_ENDPOINT_PATH) {
       if (req.method === 'OPTIONS') {
-        writeCorsHeaders(res);
+        writeCorsHeaders(req, res);
         res.statusCode = 204;
         res.end();
         return;
       }
 
       if (req.method !== 'POST') {
-        writeJson(res, 405, {
+        writeJson(req, res, 405, {
           error: 'Method Not Allowed',
           allowedMethods: ['POST', 'OPTIONS'],
         });
@@ -93,7 +94,7 @@ function installAuditApi(middlewares: MiddlewareStack): void {
       const body = await readJsonBody(req);
 
       if (!body || typeof body !== 'object' || Array.isArray(body)) {
-        writeJson(res, 400, {
+        writeJson(req, res, 400, {
           error: 'Invalid audit payload',
         });
         return;
@@ -105,7 +106,7 @@ function installAuditApi(middlewares: MiddlewareStack): void {
         event: body,
       });
 
-      writeJson(res, 202, {
+      writeJson(req, res, 202, {
         accepted: true,
         sequence: auditFeedState.latestSequence,
       });
@@ -114,14 +115,14 @@ function installAuditApi(middlewares: MiddlewareStack): void {
 
     if (requestUrl.pathname === AUDIT_FEED_PATH) {
       if (req.method === 'OPTIONS') {
-        writeCorsHeaders(res);
+        writeCorsHeaders(req, res);
         res.statusCode = 204;
         res.end();
         return;
       }
 
       if (req.method !== 'GET' && req.method !== 'HEAD') {
-        writeJson(res, 405, {
+        writeJson(req, res, 405, {
           error: 'Method Not Allowed',
           allowedMethods: ['GET', 'HEAD', 'OPTIONS'],
         });
@@ -131,7 +132,7 @@ function installAuditApi(middlewares: MiddlewareStack): void {
       const after = Number.parseInt(requestUrl.searchParams.get('after') || '0', 10);
       const events = auditFeedState.entries.filter((entry) => entry.sequence > (Number.isFinite(after) ? after : 0));
 
-      writeJson(res, 200, {
+      writeJson(req, res, 200, {
         events,
         latestSequence: auditFeedState.latestSequence,
       });
@@ -160,17 +161,21 @@ async function readJsonBody(req: IncomingMessage): Promise<AuditEnvelope | null>
   }
 }
 
-function writeJson(res: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
-  writeCorsHeaders(res);
+function writeJson(req: IncomingMessage, res: ServerResponse, statusCode: number, body: Record<string, unknown>): void {
+  writeCorsHeaders(req, res);
   res.statusCode = statusCode;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify(body));
 }
 
-function writeCorsHeaders(res: ServerResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+function writeCorsHeaders(req: IncomingMessage, res: ServerResponse): void {
+  const requestOrigin = req.headers.origin;
+  const allowOrigin = requestOrigin === HOST_APP_ORIGIN ? requestOrigin : HOST_APP_ORIGIN;
+  res.setHeader('Access-Control-Allow-Origin', allowOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Vary', 'Origin');
 }
 
 export default defineConfig({
@@ -181,11 +186,9 @@ export default defineConfig({
     port: 4001,
     strictPort: true,
     https: readHttpsOptions(),
-    cors: true,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,HEAD,POST,OPTIONS',
-      'Access-Control-Allow-Headers': '*',
+    cors: {
+      origin: HOST_APP_ORIGIN,
+      credentials: true,
     },
   },
   preview: {
@@ -193,11 +196,9 @@ export default defineConfig({
     port: 4001,
     strictPort: true,
     https: readHttpsOptions(),
-    cors: true,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,HEAD,POST,OPTIONS',
-      'Access-Control-Allow-Headers': '*',
+    cors: {
+      origin: HOST_APP_ORIGIN,
+      credentials: true,
     },
   },
   build: {
