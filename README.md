@@ -1,199 +1,282 @@
-# Symphony Embedded Mode FDC3 Actions Demo
+# Symphony Embedded Mode Structured Objects Demo
 
-This sample shows how to:
-- render a Symphony Embedded Mode chat into a host container
-- send a SharedMessage with FDC3 action buttons
-- register interop callbacks so button clicks are surfaced back to the host page
-- log SDK lifecycle and FDC3 action events in a local console
+This repository has two moving parts:
 
-## Files
-- `index.html`: page shell and DOM containers
-- `styles.css`: host layout and chat container sizing
-- `app.js`: page bootstrap, event log UI, config handling, and one-shot action handling
-- `demo-data.js`: sample treasury exceptions
-- `message-builder.js`: SharedMessage payload and FDC3 action entity construction
-- `symphony-client.js`: SDK loading, render/openStream, settings, and interop registration
+- A static host page at `https://localhost:4000` that loads Symphony Embedded Mode and sends demo messages.
+- A sideloaded extension app at `https://localhost:4001` that renders the action experience inside Symphony.
 
-## Required inputs
-- Pod URL
-- Partner ID
-- Stream ID
+If you only remember one thing, remember this:
 
-The sample assumes the browser can authenticate against the target Symphony pod. Without a valid session or login handoff, the embedded iframe will render but the underlying chat bootstrap will fail.
+- `4000` = host page
+- `4001` = extension app
+- `4001/audit` + `4001/audit-feed` = local audit write/read service owned by the extension app
 
-## FDC3 action wiring
-Each action button requires two matching pieces:
-1. Markdown button markup using `id/<entityId>` in the message text.
-2. An `entities[entityId]` object of type `fdc3.fdc3Intent`.
+## What this demo does
 
-The host page receives the clicked intent through interop registration in `symphony-client.js`.
+- Renders a Symphony Embedded Mode chat in the browser.
+- Lets you click one treasury exception row or select multiple rows and send them as one structured-object batch.
+- Sends a SharedMessage that includes a custom Symphony structured object.
+- Uses a small sideloaded ADK extension app to render native structured-object action buttons in Symphony.
+- Adds a lightweight `Treasury Exceptions` left-nav item after the renderer has loaded.
 
-## How the FDC3 buttons work
-The button lifecycle has three stages: initialize, register, and create.
+## 5-minute quick start
 
-```mermaid
-flowchart TD
-	A[Browser loads index.html] --> B[app.js bootstraps page]
-	B --> B1[Restore query/localStorage config]
-	B --> B2[Render exception table]
-	B --> B3[Bind form and log handlers]
-	B --> B4[Register window.onECPSdkLoaded]
+### 1. Start the host page on port 4000
 
-	B --> C[User clicks Load Chat]
-	C --> D{Pod URL, Partner ID, Stream ID present?}
-	D -- No --> D1[Stop and log setup required]
-	D -- Yes --> E[Inject Symphony SDK script]
-	E --> F[SDK calls onECPSdkLoaded]
-	F --> G[Render Embedded Mode chat]
-	G --> H[Register interop callback]
+The root app is plain HTML, CSS, and JavaScript, so it needs a local HTTPS file server.
 
-	H --> I[User clicks exception row]
-	I --> J[message-builder.js builds SharedMessage]
-	J --> J1[Markdown contains id slash actionId links]
-	J --> J2[Matching entity entries are fdc3.fdc3Intent]
-	J1 --> K[Send message with window.symphony.sendMessage]
-	J2 --> K
-	K --> L[Symphony renders FDC3 action buttons in chat]
+Run this from the repository root:
 
-	L --> M[User clicks Acknowledge or Escalate]
-	M --> N[SDK resolves linked intent entity]
-	N --> O[handleInteropAction receives intent and context]
-	O --> P[Host logs event and ignores duplicate action IDs]
+```bash
+mkdir -p .tmp
+openssl req -x509 -newkey rsa:2048 -sha256 -days 1 -nodes \
+  -subj "/CN=localhost" \
+  -keyout .tmp/localhost.key \
+  -out .tmp/localhost.crt
 
-	Q[Browser authenticated to Symphony pod] -. required .-> G
-	R[SDK exposes registerInterop] -. required for host callback .-> H
-	S[Link ids must match entity ids] -. required .-> L
+python3 -c "import http.server, ssl, socketserver, os; os.chdir(os.getcwd()); handler=http.server.SimpleHTTPRequestHandler; httpd=socketserver.TCPServer(('localhost', 4000), handler); ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.load_cert_chain('.tmp/localhost.crt', '.tmp/localhost.key'); httpd.socket=ctx.wrap_socket(httpd.socket, server_side=True); print('HTTPS server ready at https://localhost:4000', flush=True); httpd.serve_forever()"
 ```
 
-### 1. Initialize
-Page startup happens in `app.js`.
-- Query-string and localStorage config are restored.
-- The exception table is rendered.
-- The form submit handler is bound.
-- A global SDK callback is registered on `window.onECPSdkLoaded`.
+Then open:
 
-At this point, no FDC3 buttons exist yet. The page is only preparing the inputs and the host-side callback wiring needed for Embedded Mode.
+- `https://localhost:4000`
 
-### 2. Register
-When the user clicks **Load Chat**, the app validates the required Embedded Mode inputs:
-- Pod URL
-- Partner ID
-- Stream ID
+### 2. Start the extension app on port 4001
 
-If the Symphony SDK is not already loaded, the app injects the SDK script with:
-- `render="explicit"`
-- `data-onload="onECPSdkLoaded"`
-- `data-partner-id="<partner id>"`
+Open a second terminal:
 
-When the SDK finishes loading, the registered `window.onECPSdkLoaded` callback runs and calls the Embedded Mode render flow.
-
-After the chat render succeeds, the app attempts to register an interop callback using `registerInterop`.
-
-This is the key registration step for FDC3 actions. Without it:
-- the action links can still render inside the Symphony message
-- but the host page will not receive the clicked intent/context payload
-
-### 3. Create
-The visible FDC3 action buttons are created when a payment exception row is selected and sent to Symphony.
-
-`message-builder.js` builds a SharedMessage payload with two matching parts:
-1. Markdown text containing action links like `id/<entityId>`
-2. `entities[entityId]` entries of type `fdc3.fdc3Intent`
-
-For example:
-- `§[Acknowledge](id/<actionId>)`
-- `§[Escalate](id/<actionId>)`
-
-Each entity carries:
-- a title
-- an intent name
-- an FDC3 context payload
-
-Symphony reads that payload and renders the action links as clickable buttons inside the chat message.
-
-## End-to-end flow
-1. The page boots and binds host-side handlers.
-2. The user enters Pod URL, Partner ID, and Stream ID.
-3. The SDK script loads.
-4. Embedded Mode renders the target chat.
-5. The host registers `registerInterop` so action clicks can be observed.
-6. A user clicks an exception row in the host table.
-7. The app builds a SharedMessage containing markdown action links and matching FDC3 intent entities.
-8. The message is sent with `window.symphony.sendMessage(...)`.
-9. Symphony renders the actions in chat.
-10. When a user clicks an action in chat, the registered interop callback receives the `intent` and `context`.
-
-```mermaid
-sequenceDiagram
-	autonumber
-	actor User
-	participant Browser as Browser/Page
-	participant App as app.js
-	participant Builder as message-builder.js
-	participant Client as symphony-client.js
-	participant SDK as Symphony SDK
-	participant Chat as Embedded Chat
-
-	Browser->>App: Boot page
-	App->>App: Restore config and render exception table
-	App->>Client: registerGlobalSdkHook(onECPSdkLoaded)
-
-	User->>App: Submit Pod URL, Partner ID, Stream ID
-	App->>App: loadEmbeddedMode()
-	App->>Client: ensureSdkScript(...)
-	Client->>SDK: Inject sdk.js with partner id and onload hook
-	SDK-->>App: onECPSdkLoaded()
-
-	App->>Client: renderChat()
-	Client->>SDK: render(containerId, renderConfig)
-	SDK-->>Chat: Render target stream in iframe/container
-	Client->>SDK: registerInterop(handleInteropAction)
-	SDK-->>App: Interop callback registered
-
-	User->>App: Click exception row
-	App->>Builder: buildSymphonyMessage(row)
-	Builder-->>App: SharedMessage with markdown id/<actionId> links and entities[actionId]
-	App->>SDK: sendMessage(message, options)
-	SDK-->>Chat: Render FDC3 actions in chat message
-
-	User->>Chat: Click Acknowledge/Escalate
-	Chat->>SDK: Resolve linked fdc3.fdc3Intent entity
-	SDK-->>App: handleInteropAction(intent, context)
-	App->>App: Log event and ignore duplicate action ids
+```bash
+cd extension-app
+npm install
+npm run dev
 ```
+
+That serves:
+
+- `https://localhost:4001/bundle.json`
+- `https://localhost:4001/controller.html`
+- `https://localhost:4001/audit`
+- `https://localhost:4001/audit-feed`
+
+### 3. Sideload the extension app into Symphony
+
+Use the bundle URL from [extension-app/bundle.json](extension-app/bundle.json):
+
+- `https://localhost:4001/bundle.json`
+
+Open Symphony developer mode with that bundle URL encoded into the `bundle` query parameter.
+
+### 4. Load chat in the host page
+
+Go back to `https://localhost:4000`, fill in the top form, and click `Load Chat`.
+
+## What to enter in the form
+
+![Annotated setup example](docs/assets/setup-fields.svg)
+
+| Field | What it means | Example |
+| --- | --- | --- |
+| Pod URL | Your Symphony pod hostname only. Do not include `https://`. | `company.symphony.com` |
+| Partner ID | The Embedded Mode partner id for your app. This is not your user id. | `demo-partner-id` |
+| Stream ID | The room, IM, or MIM stream id you want to open and send into. | `abc123example-stream-id` |
+| Theme | The local host theme. `Light` is the simplest default. | `Light` |
+| Login | How the Symphony login flow should open. `Popup` is the safest local-dev choice. | `Popup` |
+| Audit Feed URL | Optional authenticated backend endpoint the host page can poll for accepted action audit events. On first load, the dashboard pre-populates this with the extension app local feed URL. | `https://api.example.com/audit/events` |
+
+Important notes:
+
+- The app strips `https://` automatically from `Pod URL`.
+- `Partner ID` must belong to an Embedded Mode app that is valid for the same pod.
+- `Stream ID` must be a real conversation the logged-in user can access.
+
+## Fastest way to avoid typing values
+
+The host page accepts query-string values and stores them in local storage.
+
+Example URL:
+
+```text
+https://localhost:4000/?pod=company.symphony.com&partnerId=demo-partner-id&streamId=abc123example-stream-id&theme=light&login=popup
+```
+
+Use that once and the form will prefill. After that, the last values are restored automatically.
+
+If you do not supply an `auditFeedUrl`, the dashboard pre-populates the field with `https://localhost:4001/audit-feed`.
+
+That local default is intentional: the dashboard owns message sending, while the extension app owns message rendering plus action-audit ingestion and replay.
+
+In local development, the dashboard polls `https://localhost:4001/audit-feed` as an unauthenticated cross-origin feed. Production feeds can still require authenticated requests.
+
+## Happy path
+
+This is the simplest possible end-to-end flow:
+
+1. Start the host page on `https://localhost:4000`.
+2. Start the extension app on `https://localhost:4001`.
+3. Sideload `https://localhost:4001/bundle.json` into Symphony developer mode.
+4. Open `https://localhost:4000`.
+5. Enter `Pod URL`, `Partner ID`, and `Stream ID`.
+6. Click `Load Chat`.
+7. Confirm the `Active Chat` panel loads the target stream.
+8. Click a row in `Payment Exceptions`, or tick multiple checkboxes and click `Send selected`.
+9. Confirm a message appears in chat with the structured-object action card.
+10. Click an action button in chat.
+11. Confirm the extension controller logs `structured-object.action.audit`.
+12. If an Audit Feed URL is configured, confirm the web page records `structured-object.action.audit.received` followed by `audit.state.changed`.
 
 ## Required wiring before buttons can be used
-The following must be in place before the buttons will work end to end:
-- A valid host page container for Embedded Mode chat
-- A working Symphony SDK load path for the target pod
-- A valid Partner ID
-- A valid Stream ID
-- Browser access/authentication to the target Symphony pod
-- A SharedMessage payload where the markdown `id/<entityId>` targets exactly match `entities[entityId]`
-- SDK support for `registerInterop` if the host page needs to observe button clicks
 
-If the markdown/entity ids do not match, the action will not behave correctly.
+Treat this as a preflight checklist.
 
-If chat renders but `registerInterop` is unavailable, the buttons may still appear in Symphony, but the host page will not log the callback.
+| Requirement | What must be true | How to verify |
+| --- | --- | --- |
+| Host page | The root app is reachable on HTTPS at `https://localhost:4000` | You can load the page and see the setup form |
+| Extension app | The extension app is reachable at `https://localhost:4001/controller.html` | Opening the controller URL returns the blank controller page |
+| Sideload bundle | Symphony can fetch `https://localhost:4001/bundle.json` | The bundle URL opens in the browser and Symphony accepts it |
+| Pod access | The browser can authenticate against the same pod entered in `Pod URL` | Login succeeds and the chat panel can render |
+| Partner ID | The partner id is valid for Embedded Mode on that pod | The SDK loads instead of failing immediately |
+| Stream ID | The stream exists and the user can access it | The target conversation opens in `Active Chat` |
+| Message wiring | The message contains visible fallback text, an entity placeholder with matching `data-entity-id`, and a `fdc3.symphonyEntity` whose data `type` matches the controller object type | The structured-object action card appears in chat |
+| App loaded | The `Treasury Exceptions` item appears in Symphony left navigation | Clicking it logs `structured-object.controller.loaded` |
+| Renderer wiring | The sideloaded extension registers through `ADK.messages.registerRenderer` | Clicking a button logs `structured-object.action.audit` in the controller console |
+| Audit endpoint | Local dev defaults `auditEndpointUrl` in `controller.config.json` to `https://localhost:4001/audit`; production deployments can replace it with a backend service | Button clicks are POSTed to the extension-owned local audit endpoint or the customer backend |
+| Audit feed | The host page defaults to `https://localhost:4001/audit-feed` for local dev and can be pointed at a backend feed in production | `Structured Object Audit Trail` shows `structured-object.action.audit.received` followed by `audit.state.changed` |
 
-## Button semantics
-This sample treats action buttons as one-shot from the host perspective.
-- The first click is logged and processed.
-- Repeated clicks with the same action id are ignored by the host.
+If one row in this table is not true, fix that row first before debugging anything deeper.
 
-Note: the existing message inside Symphony is not mutated after click. If you need the button to become visually disabled in chat, that typically requires a message update or replacement capability outside the scope of this sample.
+## Common setup mistakes
 
-## Embedded Mode Configuration
-The sample requests a compact profile through SDK settings:
-- `showTitle: false`
-- `showMembers: false`
-- `showInfo: false`
-- `symphonyLogo: false`
-- `sound: false`
+| Symptom | Usually means | First thing to check |
+| --- | --- | --- |
+| Chat never loads | `Pod URL`, `Partner ID`, or auth is wrong | Confirm the browser can log into the same pod |
+| Chat loads but no message is sent | `Stream ID` is wrong or the SDK is not ready yet | Confirm the `Active Chat` panel is already showing the target conversation |
+| Message appears as fallback text | The extension is not loaded or the object `type` does not match the registered renderer | Check the controller iframe console for `structured-object.renderer.registered` |
+| Button click logs in controller but not in host page | The host page is not reading from a backend audit feed | Configure `auditEndpointUrl` for the extension and Audit Feed URL for the host page |
+| Symphony does not load the extension app | The sideload bundle URL is wrong or `localhost:4001` is not reachable | Open `https://localhost:4001/bundle.json` directly in the browser |
+| Values disappear after refresh | The page was never loaded with the query string and nothing is cached yet | Load the example URL once with your own values |
 
-Some visible iframe chrome may still depend on the target pod, auth state, and SDK plan.
+## Files
+
+- [index.html](index.html): host page shell and config form
+- [styles.css](styles.css): host layout and chat container styling
+- [app.js](app.js): host page bootstrap, form handling, event console, and send flow
+- [demo-data.js](demo-data.js): sample payment exceptions
+- [message-builder.js](message-builder.js): SharedMessage and structured-object entity construction
+- [symphony-client.js](symphony-client.js): SDK loading and render flow
+- [extension-app/package.json](extension-app/package.json): extension app scripts and dependencies
+- [extension-app/bundle.json](extension-app/bundle.json): sideload bundle manifest
+- [extension-app/controller.html](extension-app/controller.html): controller bootstrap page
+- [extension-app/controller.config.json](extension-app/controller.config.json): static sideload reference values
+- [extension-app/src/controller/main.ts](extension-app/src/controller/main.ts): controller entry point
+- [extension-app/src/controller/startControllerApp.ts](extension-app/src/controller/startControllerApp.ts): ADK startup flow
+- [extension-app/src/controller/registerStructuredObjectRenderer.ts](extension-app/src/controller/registerStructuredObjectRenderer.ts): renderer registration logic
+- [extension-app/icon.svg](extension-app/icon.svg): sideload icon
+
+## Structured object flow
+
+The runtime flow is simple:
+
+1. The host page loads and restores any cached values.
+2. The user clicks `Load Chat`.
+3. The Symphony SDK is loaded and the target stream is rendered.
+4. The sideloaded extension boots through `ADK.start`.
+5. The extension registers `com.mistryvinay.treasury.exception` with `ADK.messages.registerRenderer`.
+6. The extension adds the `Treasury Exceptions` left-nav item as a loaded indicator.
+7. The user clicks one payment exception row or selects multiple rows and clicks `Send selected`.
+8. The host builds a SharedMessage with visible fallback text and a `fdc3.symphonyEntity` payload whose `data.items` array contains the selected exception rows and whose `origin` object records the intended stream id, host page, local message id, and send time.
+9. The message is sent into the active stream.
+10. Symphony invokes the extension renderer and shows native action buttons in chat.
+11. Clicking a button calls the ADK renderer action callback.
+12. The extension creates an audit event with action, exception, message/entity ids, origin stream metadata, duplicate status, and best-effort Symphony user identity from ADK startup.
+13. The extension best-effort posts that event to the current Symphony window for local diagnostics.
+14. If `auditEndpointUrl` is configured, the extension also POSTs the event to the audit service.
+15. In local development, that audit service is built into the extension app at `https://localhost:4001/audit`.
+16. If the host page has an Audit Feed URL, it polls the feed and renders `structured-object.action.audit.received`, then updates its in-memory state and renders `audit.state.changed`.
+17. The dashboard correlates the inbound action event back to the original `hostMessageId` delivery record so the audit trail can show both the local host message id and the returned Symphony message id.
+
+## Production audit contract
+
+The production pattern is backend-mediated. The extension controller and the standalone host page are not guaranteed to share a window tree, so direct `postMessage` is diagnostic only.
+
+Local development defaults [extension-app/controller.config.json](extension-app/controller.config.json) to:
+
+```json
+{
+  "symphonyAppId": "localhost-4001",
+  "objectType": "com.mistryvinay.treasury.exception",
+  "auditEndpointUrl": "/audit"
+}
+```
+
+That lets the extension app accept action-audit writes on `https://localhost:4001/audit` and replay them from `https://localhost:4001/audit-feed` without coupling that logic to the dashboard.
+
+For production, configure [extension-app/controller.config.json](extension-app/controller.config.json) like this instead:
+
+```json
+{
+  "symphonyAppId": "localhost-4001",
+  "objectType": "com.mistryvinay.treasury.exception",
+  "auditEndpointUrl": "https://api.example.com/symphony/structured-object/actions"
+}
+```
+
+The extension POSTs a versioned audit envelope to that endpoint:
+
+```json
+{
+  "source": "sym-em-structured-object-extension",
+  "type": "structured-object.action.audit",
+  "version": 1,
+  "payload": {
+    "auditEventId": "uuid",
+    "auditKey": "hostMessageId:exceptionId:actionId",
+    "status": "accepted",
+    "actionId": "acknowledge-PAY-10482",
+    "action": "acknowledge",
+    "messageId": "treasury-PAY-10482-...",
+    "entityId": "treasury-PAY-10482-...-structured-object",
+    "exceptionId": "PAY-10482",
+    "origin": {
+      "streamId": "stream-id",
+      "hostPage": "https://localhost:4000/",
+      "hostMessageId": "treasury-PAY-10482-...",
+      "sentAt": "2026-05-20T13:28:25.623Z"
+    },
+    "actor": {
+      "userId": "symphony-user-id"
+    }
+  }
+}
+```
+
+For the demo host page to show inbound action events, provide an Audit Feed URL that returns:
+
+```json
+{
+  "events": [
+    {
+      "sequence": 1,
+      "event": {
+        "source": "sym-em-structured-object-extension",
+        "type": "structured-object.action.audit",
+        "version": 1,
+        "payload": {}
+      }
+    }
+  ],
+  "latestSequence": 1
+}
+```
+
+The host page calls the feed with `?after=<lastSequence>` and stores the resulting state in memory only.
+
+If the configured Audit Feed URL responds with non-JSON content such as the dashboard HTML page itself, the host page logs `audit.feed.disabled` and stops polling until you reload with a real backend feed endpoint.
 
 ## Known limitations
+
 - No automated tests are included.
 - The sample depends on a live Symphony environment.
-- Chat-action state is enforced in the host page, not by mutating the original chat message.
+- The sample does not create streams for you.
+- Audit state is kept in the web page memory for the demo and is lost on reload.
+- Direct `postMessage` from the extension to the host page is diagnostic only; production action audit requires a backend endpoint.
+- Duplicate action clicks are ignored by the extension audit processor, but the original chat message is not mutated or visually disabled.

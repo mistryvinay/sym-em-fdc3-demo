@@ -1,0 +1,15 @@
+{
+  "applications": [
+    {
+      "type": "sandbox",
+      "id": "localhost-4001",
+      "name": "Treasury Exception Renderer",
+      "description": "Registers a structured object renderer for treasury exception messages.",
+      "blurb": "Renders structured treasury exception cards inside Symphony conversations.",
+      "publisher": "mistryvinay",
+      "url": "https://localhost:4001/controller.html",
+      "domain": "localhost",
+      "icon": "https://localhost:4001/icon.svg"
+    }
+  ]
+}

@@ -1,2 +1,10 @@
 .vscode/
 .DS_Store
+.tmp/
+.vite/
+node_modules/
+dist/
+extension-app/node_modules/
+extension-app/dist/
+*.har
+icon.svg

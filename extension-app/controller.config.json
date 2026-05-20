@@ -1,0 +1,5 @@
+{
+  "symphonyAppId": "localhost-4001",
+  "objectType": "com.mistryvinay.treasury.exception",
+  "auditEndpointUrl": "/audit"
+}

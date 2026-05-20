@@ -50,8 +50,7 @@ export async function renderEmbeddedChat({
   setLoadButtonBusy,
   setSdkStatus,
   logEvent,
-  serializeError,
-  onInteropAction
+  serializeError
 }) {
   if (!streamId) {
     setSdkStatus("Stream required", "pending");
@@ -97,8 +96,11 @@ export async function renderEmbeddedChat({
       ...CHAT_CHROME_SETTINGS
     };
 
+    const authState = await checkEmbeddedAuth(logEvent, serializeError);
+    const renderArgs = buildRenderArgs({ renderConfig, authState, loginMode });
+
     const renderResult = await withTimeout(
-      window.symphony.render(containerId, renderConfig),
+      window.symphony.render(containerId, ...renderArgs),
       RENDER_TIMEOUT_MS,
       "window.symphony.render"
     );
@@ -118,8 +120,6 @@ export async function renderEmbeddedChat({
       streamId: resolvedStreamId,
       appliedChrome: CHAT_CHROME_SETTINGS
     });
-
-    await registerInteropHandler(state, logEvent, onInteropAction, serializeError);
   } catch (error) {
     state.sdkReady = false;
     state.loadingSdk = false;
@@ -131,38 +131,40 @@ export async function renderEmbeddedChat({
   }
 }
 
-async function registerInteropHandler(state, logEvent, onInteropAction, serializeError) {
-  if (state.interopRegistered) {
-    logEvent("interop.skipped", { reason: "Interop callback is already registered." });
-    return;
-  }
-
-  /*
-   * This registration is what turns button clicks back into observable demo
-   * events. Without it, the FDC3 intent entities still render in chat, but the
-   * host page never receives the clicked intent/context payload for logging.
-   */
-  const registerInterop = getFirstFunction([
-    window.symphony && window.symphony.registerInterop,
-    window.symphony && window.symphony.registerinterop,
-    window.registerInterop,
-    window.registerinterop
-  ], window.symphony || window);
-
-  if (typeof registerInterop !== "function") {
-    logEvent("interop.unavailable", {
-      reason: "registerInterop is not exposed by the current Embedded Mode plan or SDK version."
+async function checkEmbeddedAuth(logEvent, serializeError) {
+  const checkAuth = window.symphony && window.symphony.checkAuth;
+  if (typeof checkAuth !== "function") {
+    logEvent("sdk.authCheck.unavailable", {
+      reason: "checkAuth is not exposed by the current Embedded Mode SDK."
     });
-    return;
+    return null;
   }
 
   try {
-    await registerInterop(onInteropAction);
-    state.interopRegistered = true;
-    logEvent("interop.registered", { callback: onInteropAction.name || "anonymous" });
+    const authState = await Promise.resolve(checkAuth(true));
+    logEvent("sdk.authCheck.completed", authState || { isLoggedIn: true });
+    return authState || null;
   } catch (error) {
-    logEvent("interop.registration.failed", serializeError(error));
+    logEvent("sdk.authCheck.failed", serializeError(error));
+    return null;
   }
+}
+
+function buildRenderArgs({ renderConfig, authState, loginMode }) {
+  if (!authState || authState.isLoggedIn) {
+    return [renderConfig];
+  }
+
+  if (authState.authenticationType === "password" && loginMode !== "popup") {
+    return [renderConfig, true];
+  }
+
+  return [
+    {
+      ...renderConfig,
+      ecpLoginPopup: true
+    }
+  ];
 }
 
 function registerUserInteractionHandler(state, setSdkStatus, logEvent) {
@@ -190,11 +192,6 @@ async function applyChatChromeSettings() {
   }
 
   await Promise.resolve(window.symphony.updateSettings(CHAT_CHROME_SETTINGS));
-}
-
-function getFirstFunction(candidates, thisArg) {
-  const fn = candidates.find((candidate) => typeof candidate === "function");
-  return fn ? fn.bind(thisArg) : null;
 }
 
 function getStreamIdFromResult(result) {

@@ -1,62 +1,104 @@
 const TEXT_MARKDOWN = "text/markdown";
+const SYMPHONY_ENTITY = "fdc3.symphonyEntity";
+const TREASURY_EXCEPTION_TYPE = "com.mistryvinay.treasury.exception";
+const TREASURY_EXCEPTION_VERSION = "1.0";
 
-export function buildSymphonyMessage(row) {
-  const messageId = `treasury-${row.id}-${Date.now()}`;
-  const acknowledgeActionId = buildActionId(messageId, "acknowledge");
-  const escalateActionId = buildActionId(messageId, "escalate");
+export function buildSymphonyMessage(row, origin = {}) {
+  return buildStructuredObjectMessage([row], origin);
+}
 
-  const markdown = [
-    `**Treasury exception ${row.id}: ${row.action}**`,
-    "",
-    `Counterparty: ${row.counterparty}`,
-    `Amount: ${row.amount}`,
-    `Cutoff: ${row.cutoff}`,
-    `Settlement date: ${row.settlementDate}`,
-    "",
-    row.reason,
-    "",
-    `§[Acknowledge](id/${acknowledgeActionId}) §[Escalate](id/${escalateActionId})`
-  ].join("\n");
+export function buildSymphonyBatchMessage(rows, origin = {}) {
+  return buildStructuredObjectMessage(rows, origin);
+}
 
-  /*
-   * FDC3 action buttons in SharedMessage payloads are two-part:
-   * 1. Markdown uses the special id/<entityId> link target.
-   * 2. entities[entityId] must exist as an fdc3.fdc3Intent object.
-   *
-   * If either side is missing or the ids do not match, the button renders
-   * but the callback will not surface the intended custom action payload.
-  *
-  * Action ids are message-scoped rather than row-scoped so later copies of
-  * the same exception card do not inherit one-shot handling state.
-   */
+function buildStructuredObjectMessage(rows, origin) {
+  const safeRows = rows.filter(Boolean);
+
+  if (safeRows.length === 0) {
+    throw new Error("At least one payment exception is required to build a structured object message.");
+  }
+
+  const primaryRow = safeRows[0];
+  const messageId = safeRows.length === 1
+    ? `treasury-${primaryRow.id}-${Date.now()}`
+    : `treasury-batch-${safeRows.length}-${Date.now()}`;
+  const entityId = `${messageId}-structured-object`;
+  const structuredObjectData = buildStructuredObjectData({
+    rows: safeRows,
+    messageId,
+    entityId,
+    origin
+  });
+
   const message = {
     text: {
-      [TEXT_MARKDOWN]: markdown
+      [TEXT_MARKDOWN]: [
+        buildVisibleFallbackSummary(structuredObjectData),
+        buildStructuredObjectPlaceholder(entityId, structuredObjectData)
+      ].join("\n\n")
     },
     entities: {
-      [acknowledgeActionId]: {
-        type: "fdc3.fdc3Intent",
-        data: {
-          title: "Acknowledge",
-          intent: "AcknowledgeException",
-          context: buildInteractionContext(row, acknowledgeActionId)
-        }
-      },
-      [escalateActionId]: {
-        type: "fdc3.fdc3Intent",
-        data: {
-          title: "Escalate",
-          intent: "EscalateException",
-          context: buildInteractionContext(row, escalateActionId, { escalationRequested: true })
-        }
+      [entityId]: {
+        type: SYMPHONY_ENTITY,
+        data: structuredObjectData
       }
     }
   };
 
   return {
-    metadata: { messageId },
+    metadata: {
+      messageId,
+      entityId,
+      objectType: TREASURY_EXCEPTION_TYPE,
+      rowCount: safeRows.length
+    },
     message
   };
+}
+
+function buildStructuredObjectPlaceholder(entityId, data) {
+  const items = Array.isArray(data.items) ? data.items : [];
+  const rows = items.slice(0, 6).map((item) => [
+    `<b>${escapeHtml(item.exceptionId)}: ${escapeHtml(item.requiredAction)}</b><br/>`,
+    `Counterparty: ${escapeHtml(item.counterparty)}<br/>`,
+    `Amount: ${escapeHtml(item.amount)}<br/>`,
+    `Cutoff: ${escapeHtml(item.cutoff)}<br/>`,
+    `Risk: ${escapeHtml(item.risk)}<br/>`,
+    `${escapeHtml(item.reason)}`
+  ].join(""));
+  const overflow = items.length > rows.length
+    ? `<br/><i>${items.length - rows.length} more exceptions included.</i>`
+    : "";
+
+  return [
+    `<div class="entity" data-entity-id="${escapeHtml(entityId)}">`,
+    `<b>${escapeHtml(data.header.title)}</b><br/>`,
+    rows.join("<br/><br/>"),
+    overflow,
+    "</div>"
+  ].join("");
+}
+
+function buildVisibleFallbackSummary(data) {
+  const items = Array.isArray(data.items) ? data.items : [];
+
+  if (items.length === 1) {
+    const item = items[0];
+    return [
+      `**${data.header.title}**`,
+      `Counterparty: ${item.counterparty}`,
+      `Amount: ${item.amount}`,
+      `Cutoff: ${item.cutoff}`,
+      `Settlement date: ${item.settlementDate}`,
+      item.reason
+    ].join("\n");
+  }
+
+  const rows = items
+    .map((item) => `- ${item.exceptionId}: ${item.counterparty}, ${item.amount}, ${item.risk} risk`)
+    .join("\n");
+
+  return [`**${data.header.title}**`, rows].join("\n");
 }
 
 export function buildSendOptions({ streamId, activeStreamId }) {
@@ -72,38 +114,84 @@ export function buildSendOptions({ streamId, activeStreamId }) {
   return options;
 }
 
-function buildActionId(messageId, action) {
-  return `${messageId}-${action}`;
+function buildStructuredObjectData({ rows, messageId, entityId, origin }) {
+  const items = rows.map((row) => buildStructuredObjectItem(row));
+  const primaryItem = items[0];
+  const isBatch = items.length > 1;
+  const createdAt = new Date().toISOString();
+
+  return {
+    type: TREASURY_EXCEPTION_TYPE,
+    version: TREASURY_EXCEPTION_VERSION,
+    id: entityId,
+    entityId,
+    messageId,
+    name: isBatch
+      ? `Treasury exception batch (${items.length})`
+      : `Treasury exception ${primaryItem.exceptionId}`,
+    header: {
+      title: isBatch
+        ? `Treasury exception batch (${items.length})`
+        : `Treasury exception ${primaryItem.exceptionId}: ${primaryItem.requiredAction}`,
+      subtitle: isBatch
+        ? items.map((item) => item.exceptionId).join(", ")
+        : `${primaryItem.counterparty} / ${primaryItem.amount}`
+    },
+    details: primaryItem,
+    items,
+    actions: items.flatMap((item) => buildStructuredObjectActions(item)),
+    origin: {
+      ...origin,
+      hostMessageId: messageId,
+      sentAt: createdAt
+    },
+    createdAt
+  };
 }
 
-function buildInteractionContext(row, actionId, overrides = {}) {
+function buildStructuredObjectItem(row) {
   return {
-    type: "fdc3.interaction",
-    name: `Treasury exception ${row.id}`,
-    id: {
-      exceptionId: row.id,
-      actionId
-    },
-    participants: [
-      {
-        type: "fdc3.organization",
-        name: row.counterparty
-      }
-    ],
-    interactionType: "workflow-action",
-    timeRange: {
-      startTime: new Date().toISOString()
-    },
-    details: {
-      amount: row.amount,
-      cutoff: row.cutoff,
-      owner: row.owner,
-      instrument: row.instrument,
-      requiredAction: row.action,
-      risk: row.risk,
-      settlementDate: row.settlementDate,
-      reason: row.reason,
-      ...overrides
-    }
+    exceptionId: row.id,
+    counterparty: row.counterparty,
+    amount: row.amount,
+    cutoff: row.cutoff,
+    owner: row.owner,
+    instrument: row.instrument,
+    requiredAction: row.action,
+    risk: row.risk,
+    settlementDate: row.settlementDate,
+    reason: row.reason
   };
+}
+
+function buildStructuredObjectActions(item) {
+  const suffix = normalizeActionId(item.exceptionId);
+
+  return [
+    {
+      id: `acknowledge-${suffix}`,
+      label: "Acknowledge",
+      type: "acknowledge",
+      exceptionId: item.exceptionId
+    },
+    {
+      id: `escalate-${suffix}`,
+      label: "Escalate",
+      type: "escalate",
+      exceptionId: item.exceptionId
+    }
+  ];
+}
+
+function normalizeActionId(value) {
+  return String(value).trim().replace(/[^A-Za-z0-9_-]+/g, "-");
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
