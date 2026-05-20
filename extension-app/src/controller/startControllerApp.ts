@@ -1,6 +1,4 @@
-import { start } from '@symphony-ui/adk/lib/impl/SymADK';
-import { add as addNavigationItem } from '@symphony-ui/adk/lib/impl/Navigation';
-import { SERVICE_API_CONFIGURATIONS } from '@symphony-ui/adk/lib/impl/Utils';
+import * as ADK from '@symphony-ui/adk';
 
 import { loadRuntimeConfig, type RuntimeConfig } from './config';
 import {
@@ -10,6 +8,10 @@ import {
 } from './registerStructuredObjectRenderer';
 
 const ADK_START_TIMEOUT_MS = 8_000;
+type ControllerWindow = Window & typeof globalThis & {
+  __symEmControllerStartPromise?: Promise<unknown>;
+  __symEmNavigationRegistered?: boolean;
+};
 
 export async function startControllerApp(): Promise<void> {
   if (!hasSymphonyHostContext()) {
@@ -27,21 +29,34 @@ export async function startControllerApp(): Promise<void> {
 }
 
 function startAdkWithTimeout(appId: string): Promise<unknown> {
-  SERVICE_API_CONFIGURATIONS.length = 0;
+  const currentWindow = getControllerWindow();
 
-  return Promise.race([
-    start({ id: appId }),
-    new Promise<never>((_, reject) => {
-      window.setTimeout(() => {
-        reject(new Error(`ADK.start did not complete within ${ADK_START_TIMEOUT_MS}ms.`));
-      }, ADK_START_TIMEOUT_MS);
-    }),
-  ]);
+  if (!currentWindow.__symEmControllerStartPromise) {
+    currentWindow.__symEmControllerStartPromise = Promise.race([
+      ADK.start({ id: appId }),
+      new Promise<never>((_, reject) => {
+        window.setTimeout(() => {
+          reject(new Error(`ADK.start did not complete within ${ADK_START_TIMEOUT_MS}ms.`));
+        }, ADK_START_TIMEOUT_MS);
+      }),
+    ]).catch((error) => {
+      currentWindow.__symEmControllerStartPromise = undefined;
+      throw error;
+    });
+  }
+
+  return currentWindow.__symEmControllerStartPromise;
 }
 
 function registerLoadedNavigationItem(config: RuntimeConfig): void {
+  const currentWindow = getControllerWindow();
+
+  if (currentWindow.__symEmNavigationRegistered) {
+    return;
+  }
+
   try {
-    addNavigationItem(
+    ADK.navigation.add(
       'Treasury Exceptions',
       () => {
         window.console.info('structured-object.controller.loaded', {
@@ -51,9 +66,14 @@ function registerLoadedNavigationItem(config: RuntimeConfig): void {
       },
       new URL('./icon.svg', window.location.href).toString(),
     );
+    currentWindow.__symEmNavigationRegistered = true;
   } catch (error) {
     window.console.warn('structured-object.navigation.failed', error);
   }
+}
+
+function getControllerWindow(): ControllerWindow {
+  return window as ControllerWindow;
 }
 
 function readViewerFromStartup(startup: unknown): ViewerContext {

@@ -1,4 +1,4 @@
-import { registerRenderer } from '@symphony-ui/adk/lib/impl/Messages';
+import * as ADK from '@symphony-ui/adk';
 
 import type { RuntimeConfig } from './config';
 
@@ -48,6 +48,9 @@ const SHARED_MESSAGE_SYMPHONY_ENTITY_TYPE = 'fdc3.symphonyEntity';
 const AUDIT_EVENT_SOURCE = 'sym-em-structured-object-extension';
 const AUDIT_EVENT_TYPE = 'structured-object.action.audit';
 const processedActions = new Set<string>();
+type ControllerWindow = Window & typeof globalThis & {
+  __symEmRendererRegistered?: boolean;
+};
 
 export function hasSymphonyHostContext(
   currentWindow: Window | undefined = typeof window === 'undefined' ? undefined : window,
@@ -71,6 +74,12 @@ export function registerStructuredObjectRenderer(options: {
   viewer: ViewerContext;
 }): void {
   const { config, viewer } = options;
+  const currentWindow = getControllerWindow();
+
+  if (currentWindow.__symEmRendererRegistered) {
+    return;
+  }
+
   const onRender = (entityData: StructuredObjectData) => renderTreasuryException(config, entityData);
   const onAction = (actionId: string, actionPayload?: StructuredActionPayload) => {
     void publishAuditEvent({
@@ -81,7 +90,8 @@ export function registerStructuredObjectRenderer(options: {
     });
   };
 
-  registerRenderer(SHARED_MESSAGE_SYMPHONY_ENTITY_TYPE, onRender, onAction);
+  ADK.messages.registerRenderer(SHARED_MESSAGE_SYMPHONY_ENTITY_TYPE, onRender, onAction);
+  currentWindow.__symEmRendererRegistered = true;
 
   window.console.info('structured-object.renderer.registered', {
     rendererType: SHARED_MESSAGE_SYMPHONY_ENTITY_TYPE,
@@ -131,9 +141,28 @@ function publishAuditEvent(options: {
   };
 
   window.console.info('structured-object.action.audit', auditEvent.payload);
-  window.top?.postMessage(auditEvent, '*');
+  postAuditEventToHost(auditEvent, origin);
 
   return publishAuditEventToEndpoint(config.auditEndpointUrl, auditEvent);
+}
+
+function postAuditEventToHost(
+  auditEvent: Record<string, unknown>,
+  origin: StructuredObjectOrigin | null,
+): void {
+  const targetOrigin = resolveAuditPostMessageTarget(origin);
+
+  if (!targetOrigin || !window.top || window.top === window) {
+    if (window.top && window.top !== window) {
+      window.console.warn('structured-object.action.audit.postMessage.skipped', {
+        reason: 'Unable to resolve host page origin from structured object payload.',
+        origin,
+      });
+    }
+    return;
+  }
+
+  window.top.postMessage(auditEvent, targetOrigin);
 }
 
 async function publishAuditEventToEndpoint(
@@ -211,6 +240,24 @@ function renderTreasuryException(config: RuntimeConfig, entityData: StructuredOb
     },
     actions,
   };
+}
+
+function resolveAuditPostMessageTarget(origin: StructuredObjectOrigin | null): string | null {
+  const hostPage = origin?.hostPage;
+
+  if (!hostPage) {
+    return null;
+  }
+
+  try {
+    return new URL(hostPage).origin;
+  } catch {
+    return null;
+  }
+}
+
+function getControllerWindow(): ControllerWindow {
+  return window as ControllerWindow;
 }
 
 function renderBatchItems(items: StructuredObjectItem[], data: StructuredObjectData): string {

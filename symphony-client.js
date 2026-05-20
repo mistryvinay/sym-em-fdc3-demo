@@ -91,6 +91,7 @@ export async function renderEmbeddedChat({
       mode: themeMode,
       streamId,
       allowChatCreation: true,
+      allowedApps: "localhost-4001",
       canAddPeople: true,
       ecpLoginPopup: loginMode === "popup",
       ...CHAT_CHROME_SETTINGS

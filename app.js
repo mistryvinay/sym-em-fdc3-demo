@@ -9,6 +9,14 @@ import {
   registerGlobalSdkHook,
   renderEmbeddedChat
 } from "./symphony-client.js";
+import {
+  applyAuditStateChangeToState,
+  isDuplicateAuditEvent,
+  isStructuredObjectAuditEnvelope,
+  isTrustedAuditOrigin,
+  resolveAuditFeedCredentials,
+  resolveAuditHostMessageId
+} from "./audit-model.js";
 
 const STORAGE_KEY = "sym-em-fdc3-demo.config";
 const CHAT_CONTAINER_ID = "ecp-chat";
@@ -17,7 +25,7 @@ const AUDIT_EVENT_SOURCE = "sym-em-structured-object-extension";
 const AUDIT_EVENT_TYPE = "structured-object.action.audit";
 const EXTENSION_APP_ORIGIN = "https://localhost:4001";
 const EXTENSION_AUDIT_FEED_URL = `${EXTENSION_APP_ORIGIN}/audit-feed`;
-const TRUSTED_AUDIT_ORIGINS = new Set([EXTENSION_APP_ORIGIN, "null"]);
+const TRUSTED_AUDIT_ORIGINS = new Set([EXTENSION_APP_ORIGIN]);
 
 const state = {
   sdkReady: false,
@@ -451,7 +459,7 @@ function handleStructuredObjectAuditMessage(event) {
     return;
   }
 
-  if (!isTrustedAuditOrigin(event.origin)) {
+  if (!isTrustedAuditOrigin(event.origin, TRUSTED_AUDIT_ORIGINS)) {
     logEvent("structured-object.action.audit.blocked", {
       origin: event.origin,
       reason: "Unexpected postMessage origin for structured-object audit event.",
@@ -476,7 +484,7 @@ function receiveStructuredObjectAuditEvent({ envelope, receivedFrom }) {
   };
   const deliveryRecord = findDeliveryRecordForAuditEvent(auditEvent);
 
-  if (isDuplicateAuditEvent(auditEvent)) {
+  if (isDuplicateAuditEvent(state, auditEvent)) {
     logEvent("structured-object.action.audit.duplicateIgnored", {
       receivedFrom,
       auditEvent,
@@ -492,25 +500,6 @@ function receiveStructuredObjectAuditEvent({ envelope, receivedFrom }) {
     deliveryRecord
   });
   applyAuditStateChange(auditEvent);
-}
-
-function isTrustedAuditOrigin(origin) {
-  return TRUSTED_AUDIT_ORIGINS.has(origin);
-}
-
-function isDuplicateAuditEvent(auditEvent) {
-  const eventId = auditEvent.auditEventId;
-
-  if (!eventId) {
-    return false;
-  }
-
-  if (state.processedAuditEventIds.has(eventId)) {
-    return true;
-  }
-
-  state.processedAuditEventIds.add(eventId);
-  return false;
 }
 
 function configureAuditFeed(auditFeedUrl) {
@@ -586,7 +575,7 @@ async function pollAuditFeed(auditFeedUrl) {
         state.auditFeedLastSequence = sequence;
       }
 
-      if (isStructuredObjectAuditEnvelope(envelope)) {
+      if (isStructuredObjectAuditEnvelope(envelope, AUDIT_EVENT_SOURCE, AUDIT_EVENT_TYPE)) {
         receiveStructuredObjectAuditEvent({
           envelope,
           receivedFrom: {
@@ -609,55 +598,20 @@ async function pollAuditFeed(auditFeedUrl) {
   }
 }
 
-function resolveAuditFeedCredentials(requestUrl) {
-  return requestUrl.origin === EXTENSION_APP_ORIGIN ? "omit" : "include";
-}
-
-function isStructuredObjectAuditEnvelope(value) {
-  return Boolean(value && value.source === AUDIT_EVENT_SOURCE && value.type === AUDIT_EVENT_TYPE && value.payload);
-}
-
 function applyAuditStateChange(auditPayload) {
-  if (!auditPayload || typeof auditPayload !== "object") {
+  const auditStateChange = applyAuditStateChangeToState(state, auditPayload);
+
+  if (!auditStateChange) {
     return;
   }
 
-  const auditEvent = {
-    ...auditPayload,
-    receivedAt: auditPayload.receivedAt || new Date().toISOString()
-  };
-  const hostMessageId = resolveAuditHostMessageId(auditEvent);
-  const deliveryRecord = hostMessageId ? state.deliveryByHostMessageId.get(hostMessageId) || null : null;
-
-  state.auditTrail.unshift(auditEvent);
-
-  if (auditEvent.auditKey) {
-    state.actionState.set(auditEvent.auditKey, {
-      status: auditEvent.status,
-      action: auditEvent.action,
-      exceptionId: auditEvent.exceptionId,
-      messageId: auditEvent.messageId,
-      hostMessageId,
-      deliveryRecord,
-      deliveries: deliveryRecord?.deliveries || [],
-      intendedStreamId: deliveryRecord?.intendedStreamId || auditEvent.origin?.streamId || null,
-      actor: auditEvent.actor,
-      occurredAt: auditEvent.occurredAt,
-      auditEventId: auditEvent.auditEventId
-    });
-  }
-
   logEvent("audit.state.changed", {
-    auditEvent,
-    hostMessageId,
-    deliveryRecord,
+    auditEvent: auditStateChange.auditEvent,
+    hostMessageId: auditStateChange.hostMessageId,
+    deliveryRecord: auditStateChange.deliveryRecord,
     actionState: Array.from(state.actionState.values()),
     auditTrailSize: state.auditTrail.length
   });
-}
-
-function resolveAuditHostMessageId(auditEvent) {
-  return auditEvent?.origin?.hostMessageId || auditEvent?.messageId || null;
 }
 
 function findDeliveryRecordForAuditEvent(auditEvent) {

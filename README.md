@@ -66,6 +66,16 @@ Use the bundle URL from [extension-app/bundle.json](extension-app/bundle.json):
 
 Open Symphony developer mode with that bundle URL encoded into the `bundle` query parameter.
 
+### 3a. Run the lightweight regression checks
+
+From the repository root:
+
+```bash
+npm test
+```
+
+This covers the message payload builder and the audit replay helper logic without needing a live Symphony session.
+
 ### 4. Load chat in the host page
 
 Go back to `https://localhost:4000`, fill in the top form, and click `Load Chat`.
@@ -276,7 +286,7 @@ If the configured Audit Feed URL responds with non-JSON content such as the dash
 
 ## Known limitations
 
-- No automated tests are included.
+- A lightweight Node test harness is included. Run `npm test` from the repository root.
 - The sample depends on a live Symphony environment.
 - The sample does not create streams for you.
 - Audit state is kept in the web page memory for the demo and is lost on reload.
