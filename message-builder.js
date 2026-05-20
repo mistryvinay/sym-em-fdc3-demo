@@ -57,24 +57,9 @@ function buildStructuredObjectMessage(rows, origin) {
 }
 
 function buildStructuredObjectPlaceholder(entityId, data) {
-  const items = Array.isArray(data.items) ? data.items : [];
-  const rows = items.slice(0, 6).map((item) => [
-    `<b>${escapeHtml(item.exceptionId)}: ${escapeHtml(item.requiredAction)}</b><br/>`,
-    `Counterparty: ${escapeHtml(item.counterparty)}<br/>`,
-    `Amount: ${escapeHtml(item.amount)}<br/>`,
-    `Cutoff: ${escapeHtml(item.cutoff)}<br/>`,
-    `Risk: ${escapeHtml(item.risk)}<br/>`,
-    `${escapeHtml(item.reason)}`
-  ].join(""));
-  const overflow = items.length > rows.length
-    ? `<br/><i>${items.length - rows.length} more exceptions included.</i>`
-    : "";
-
   return [
     `<div class="entity" data-entity-id="${escapeHtml(entityId)}">`,
-    `<b>${escapeHtml(data.header.title)}</b><br/>`,
-    rows.join("<br/><br/>"),
-    overflow,
+    `<i>Structured object attached. Use the rendered card below to review and take action.</i>`,
     "</div>"
   ].join("");
 }
@@ -86,19 +71,15 @@ function buildVisibleFallbackSummary(data) {
     const item = items[0];
     return [
       `**${data.header.title}**`,
-      `Counterparty: ${item.counterparty}`,
-      `Amount: ${item.amount}`,
-      `Cutoff: ${item.cutoff}`,
-      `Settlement date: ${item.settlementDate}`,
-      item.reason
+      `${item.counterparty} / ${item.amount}`,
+      `Open the structured object card in Symphony to review and take action.`
     ].join("\n");
   }
 
-  const rows = items
-    .map((item) => `- ${item.exceptionId}: ${item.counterparty}, ${item.amount}, ${item.risk} risk`)
-    .join("\n");
-
-  return [`**${data.header.title}**`, rows].join("\n");
+  return [
+    `**${data.header.title}**`,
+    `Open the structured object card in Symphony to review and take action.`
+  ].join("\n");
 }
 
 export function buildSendOptions({ streamId, activeStreamId }) {
@@ -132,7 +113,7 @@ function buildStructuredObjectData({ rows, messageId, entityId, origin }) {
     header: {
       title: isBatch
         ? `Treasury exception batch (${items.length})`
-        : `Treasury exception ${primaryItem.exceptionId}: ${primaryItem.requiredAction}`,
+        : `Treasury exception ${primaryItem.exceptionId}: ${primaryItem.recommendedAction}`,
       subtitle: isBatch
         ? items.map((item) => item.exceptionId).join(", ")
         : `${primaryItem.counterparty} / ${primaryItem.amount}`
@@ -157,7 +138,7 @@ function buildStructuredObjectItem(row) {
     cutoff: row.cutoff,
     owner: row.owner,
     instrument: row.instrument,
-    requiredAction: row.action,
+    recommendedAction: row.action,
     risk: row.risk,
     settlementDate: row.settlementDate,
     reason: row.reason

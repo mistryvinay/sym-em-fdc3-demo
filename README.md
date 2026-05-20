@@ -136,7 +136,7 @@ Treat this as a preflight checklist.
 | Pod access | The browser can authenticate against the same pod entered in `Pod URL` | Login succeeds and the chat panel can render |
 | Partner ID | The partner id is valid for Embedded Mode on that pod | The SDK loads instead of failing immediately |
 | Stream ID | The stream exists and the user can access it | The target conversation opens in `Active Chat` |
-| Message wiring | The message contains visible fallback text, an entity placeholder with matching `data-entity-id`, and a `fdc3.symphonyEntity` whose data `type` matches the controller object type | The structured-object action card appears in chat |
+| Message wiring | The message contains compact visible fallback text, an entity placeholder with matching `data-entity-id`, and a `fdc3.symphonyEntity` whose nested data `type` matches the controller payload type | The structured-object action card appears in chat |
 | App loaded | The `Treasury Exceptions` item appears in Symphony left navigation | Clicking it logs `structured-object.controller.loaded` |
 | Renderer wiring | The sideloaded extension registers through `ADK.messages.registerRenderer` | Clicking a button logs `structured-object.action.audit` in the controller console |
 | Audit endpoint | Local dev defaults `auditEndpointUrl` in `controller.config.json` to `https://localhost:4001/audit`; production deployments can replace it with a backend service | Button clicks are POSTed to the extension-owned local audit endpoint or the customer backend |
@@ -180,10 +180,10 @@ The runtime flow is simple:
 2. The user clicks `Load Chat`.
 3. The Symphony SDK is loaded and the target stream is rendered.
 4. The sideloaded extension boots through `ADK.start`.
-5. The extension registers `com.mistryvinay.treasury.exception` with `ADK.messages.registerRenderer`.
+5. The extension registers the `fdc3.symphonyEntity` wrapper with `ADK.messages.registerRenderer` and validates the nested payload `type` against `com.mistryvinay.treasury.exception`.
 6. The extension adds the `Treasury Exceptions` left-nav item as a loaded indicator.
 7. The user clicks one payment exception row or selects multiple rows and clicks `Send selected`.
-8. The host builds a SharedMessage with visible fallback text and a `fdc3.symphonyEntity` payload whose `data.items` array contains the selected exception rows and whose `origin` object records the intended stream id, host page, local message id, and send time.
+8. The host builds a SharedMessage with compact visible fallback text and a `fdc3.symphonyEntity` payload whose `data.items` array contains the selected exception rows and whose `origin` object records the intended stream id, host page, local message id, and send time.
 9. The message is sent into the active stream.
 10. Symphony invokes the extension renderer and shows native action buttons in chat.
 11. Clicking a button calls the ADK renderer action callback.
@@ -193,6 +193,8 @@ The runtime flow is simple:
 15. In local development, that audit service is built into the extension app at `https://localhost:4001/audit`.
 16. If the host page has an Audit Feed URL, it polls the feed and renders `structured-object.action.audit.received`, then updates its in-memory state and renders `audit.state.changed`.
 17. The dashboard correlates the inbound action event back to the original `hostMessageId` delivery record so the audit trail can show both the local host message id and the returned Symphony message id.
+
+The structured object payload uses `recommendedAction` to describe the suggested operational next step for an exception. The audit event `action` field remains the source of truth for what the user actually clicked.
 
 ## Production audit contract
 

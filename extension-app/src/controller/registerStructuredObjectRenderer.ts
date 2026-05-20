@@ -14,7 +14,7 @@ type StructuredObjectItem = {
   cutoff: string;
   owner: string;
   instrument: string;
-  requiredAction: string;
+  recommendedAction: string;
   risk: string;
   settlementDate: string;
   reason: string;
@@ -81,11 +81,11 @@ export function registerStructuredObjectRenderer(options: {
     });
   };
 
-  registerRenderer(config.objectType, onRender, onAction);
   registerRenderer(SHARED_MESSAGE_SYMPHONY_ENTITY_TYPE, onRender, onAction);
 
   window.console.info('structured-object.renderer.registered', {
-    objectTypes: [config.objectType, SHARED_MESSAGE_SYMPHONY_ENTITY_TYPE],
+    rendererType: SHARED_MESSAGE_SYMPHONY_ENTITY_TYPE,
+    payloadType: config.objectType,
   });
 }
 
@@ -191,6 +191,7 @@ function renderTreasuryException(config: RuntimeConfig, entityData: StructuredOb
   const messageId = readString(data.messageId) || null;
   const origin = readOrigin(data.origin);
   const items = readStructuredItems(data);
+  const isBatch = items.length > 1;
   const title = readString(header.title) || readString(data.name) || 'Treasury exception';
   const subtitle = readString(header.subtitle) || `${items.length} item${items.length === 1 ? '' : 's'}`;
   const actions = buildRendererActions(data, items, entityId, messageId, origin);
@@ -200,7 +201,7 @@ function renderTreasuryException(config: RuntimeConfig, entityData: StructuredOb
       '<entity>',
       `<b>${escapeXml(title)}</b><br/>`,
       `<span>${escapeXml(subtitle)}</span><br/>`,
-      items.map((item) => renderItem(item, data)).join('<br/>'),
+      isBatch ? renderBatchItems(items, data) : items.map((item) => renderItem(item, data)).join('<br/>'),
       '</entity>',
     ].join(''),
     extraData: {
@@ -212,11 +213,46 @@ function renderTreasuryException(config: RuntimeConfig, entityData: StructuredOb
   };
 }
 
+function renderBatchItems(items: StructuredObjectItem[], data: StructuredObjectData): string {
+  return [
+    '<table>',
+    '<tr>',
+    '<th>Exception</th>',
+    '<th>Recommended action</th>',
+    '<th>Counterparty</th>',
+    '<th>Amount</th>',
+    '<th>Cutoff</th>',
+    '<th>Risk</th>',
+    '<th>Actions</th>',
+    '</tr>',
+    items.map((item) => renderBatchRow(item, data)).join(''),
+    '</table>',
+  ].join('');
+}
+
+function renderBatchRow(item: StructuredObjectItem, data: StructuredObjectData): string {
+  const actions = readActionsForItem(data, item);
+
+  return [
+    '<tr>',
+    `<td><b>${escapeXml(item.exceptionId)}</b></td>`,
+    `<td>${escapeXml(item.recommendedAction)}</td>`,
+    `<td>${escapeXml(item.counterparty)}</td>`,
+    `<td>${escapeXml(item.amount)}</td>`,
+    `<td>${escapeXml(item.cutoff)}</td>`,
+    `<td>${escapeXml(item.risk)}</td>`,
+    `<td>${actions.map((action) => (
+      `<action id="${escapeXml(action.id)}" class="tk-button ${buttonClassForAction(action.type)} tk-button--small" />`
+    )).join('')}</td>`,
+    '</tr>',
+  ].join('');
+}
+
 function renderItem(item: StructuredObjectItem, data: StructuredObjectData): string {
   const actions = readActionsForItem(data, item);
 
   return [
-    `<span><b>${escapeXml(item.exceptionId)}: ${escapeXml(item.requiredAction)}</b></span><br/>`,
+    `<span><b>${escapeXml(item.exceptionId)}: ${escapeXml(item.recommendedAction)}</b></span><br/>`,
     `<span>${escapeXml(item.counterparty)} / ${escapeXml(item.amount)}</span><br/>`,
     `<span>${escapeXml(item.reason)}</span><br/>`,
     `<span><b>Cutoff</b>: ${escapeXml(item.cutoff)}</span><br/>`,
@@ -267,7 +303,7 @@ function readStructuredItems(data: StructuredObjectData): StructuredObjectItem[]
     cutoff: readString(record.cutoff) || '-',
     owner: readString(record.owner) || '-',
     instrument: readString(record.instrument) || '-',
-    requiredAction: readString(record.requiredAction) || 'Review',
+    recommendedAction: readString(record.recommendedAction) || readString(record.requiredAction) || 'Review',
     risk: readString(record.risk) || '-',
     settlementDate: readString(record.settlementDate) || '-',
     reason: readString(record.reason) || 'Review required before settlement.',
