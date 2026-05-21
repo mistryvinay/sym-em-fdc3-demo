@@ -13,7 +13,7 @@
         <div class="brand-mark">S</div>
         <div>
           <h1>Symphony Embedded Mode</h1>
-          <p>FDC3 Actions Demo</p>
+          <p>Structured Objects Demo</p>
         </div>
       </div>
       <div class="status-bar" aria-live="polite">
@@ -50,23 +50,34 @@
               <option value="popup" selected>Popup</option>
             </select>
           </div>
+          <div class="field">
+            <label for="auditFeedUrl">Audit Feed URL</label>
+            <input id="auditFeedUrl" name="auditFeedUrl" autocomplete="off" placeholder="https://api.example.com/audit/events">
+          </div>
           <button id="loadChatButton" class="primary-action" type="submit">Load Chat</button>
         </form>
 
         <section class="panel">
           <div class="panel-header">
             <h2 class="panel-title">Payment Exceptions</h2>
+            <div class="panel-actions">
+              <span id="selectedCount" class="selection-count">0 selected</span>
+              <button id="sendSelectedButton" class="secondary-action" type="button" disabled>Send selected</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table aria-label="Payment exceptions that can be sent to Symphony">
               <thead>
                 <tr>
+                  <th class="select-column">
+                    <input id="selectAllRows" class="row-select" type="checkbox" aria-label="Select all payment exceptions">
+                  </th>
                   <th style="width: 14%;">Reference</th>
                   <th style="width: 20%;">Counterparty</th>
                   <th style="width: 16%;">Amount</th>
                   <th style="width: 15%;">Cutoff</th>
                   <th style="width: 12%;">Risk</th>
-                  <th style="width: 23%;">Required Action</th>
+                  <th style="width: 23%;">Recommended Action</th>
                 </tr>
               </thead>
               <tbody id="exceptionTable"></tbody>
@@ -87,13 +98,13 @@
 
       </aside>
 
-      <section class="panel console-panel" aria-label="FDC3 notification console">
+      <section class="panel console-panel" aria-label="Structured object audit trail">
         <div class="panel-header">
-          <h2 class="panel-title">FDC3 Notification Console</h2>
+          <h2 class="panel-title">Structured Object Audit Trail</h2>
           <button id="clearLogButton" class="secondary-action" type="button">Clear</button>
         </div>
         <div class="event-console">
-          <table class="event-table" aria-label="Expandable FDC3 notification events">
+          <table class="event-table" aria-label="Expandable structured object audit events">
             <thead>
               <tr>
                 <th style="width: 44px;"></th>
