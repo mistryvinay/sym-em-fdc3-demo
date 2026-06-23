@@ -5,12 +5,27 @@ import { fileURLToPath } from 'node:url';
 
 import { defineConfig, type Plugin } from 'vite';
 
+import {
+  ACTION_INTENT_TTL_MS,
+  createActionIntentStore,
+  sanitizeAuditEnvelope,
+} from '../action-intents.js';
+
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
+const ACTION_INTENTS_ENDPOINT_PATH = '/action-intents';
 const AUDIT_ENDPOINT_PATH = '/audit';
 const AUDIT_FEED_PATH = '/audit-feed';
 const HOST_APP_ORIGIN = 'https://localhost:4000';
+const AUDIT_EVENT_SOURCE = 'sym-em-structured-object-extension';
+const AUDIT_EVENT_TYPE = 'structured-object.action.audit';
 
-type AuditEnvelope = Record<string, unknown>;
+type AuditEnvelope = {
+  source?: unknown;
+  type?: unknown;
+  version?: unknown;
+  payload?: unknown;
+  [key: string]: unknown;
+};
 type AuditFeedEntry = {
   sequence: number;
   event: AuditEnvelope;
@@ -27,6 +42,9 @@ const auditFeedState: {
   latestSequence: 0,
   entries: [],
 };
+const actionIntentStore = createActionIntentStore({
+  ttlMs: ACTION_INTENT_TTL_MS,
+});
 
 function readHttpsOptions() {
   const certPath = path.resolve(projectRoot, '../.tmp/localhost.crt');
@@ -75,6 +93,37 @@ function installAuditApi(middlewares: MiddlewareStack): void {
   middlewares.use(async (req, res, next) => {
     const requestUrl = new URL(req.url || '/', 'https://localhost:4001');
 
+    if (requestUrl.pathname === ACTION_INTENTS_ENDPOINT_PATH) {
+      if (req.method === 'OPTIONS') {
+        writeCorsHeaders(req, res);
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
+
+      if (req.method !== 'POST') {
+        writeJson(req, res, 405, {
+          error: 'Method Not Allowed',
+          allowedMethods: ['POST', 'OPTIONS'],
+        });
+        return;
+      }
+
+      const body = await readJsonBody(req);
+      const result = actionIntentStore.createIntents(body);
+
+      if (!result.ok || !result.response) {
+        writeJson(req, res, result.statusCode, {
+          error: result.error || 'Invalid action intent request',
+          reason: result.reason || 'invalid_action_intents_request',
+        });
+        return;
+      }
+
+      writeJson(req, res, result.statusCode, result.response);
+      return;
+    }
+
     if (requestUrl.pathname === AUDIT_ENDPOINT_PATH) {
       if (req.method === 'OPTIONS') {
         writeCorsHeaders(req, res);
@@ -93,22 +142,27 @@ function installAuditApi(middlewares: MiddlewareStack): void {
 
       const body = await readJsonBody(req);
 
-      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      if (!isStructuredObjectAuditEnvelope(body)) {
         writeJson(req, res, 400, {
           error: 'Invalid audit payload',
+          reason: 'invalid_audit_envelope',
         });
         return;
       }
 
-      auditFeedState.latestSequence += 1;
-      auditFeedState.entries.push({
-        sequence: auditFeedState.latestSequence,
-        event: body,
+      const result = actionIntentStore.consumeAuditPayload(body.payload);
+      const event = sanitizeAuditEnvelope(body, {
+        status: result.status,
+        decisionReason: result.reason,
+        receivedAt: new Date().toISOString(),
       });
+      const sequence = appendAuditFeedEvent(event as AuditEnvelope);
 
-      writeJson(req, res, 202, {
-        accepted: true,
-        sequence: auditFeedState.latestSequence,
+      writeJson(req, res, result.statusCode, {
+        accepted: result.accepted,
+        status: result.status,
+        reason: result.reason,
+        sequence,
       });
       return;
     }
@@ -143,6 +197,16 @@ function installAuditApi(middlewares: MiddlewareStack): void {
   });
 }
 
+function appendAuditFeedEvent(event: AuditEnvelope): number {
+  auditFeedState.latestSequence += 1;
+  auditFeedState.entries.push({
+    sequence: auditFeedState.latestSequence,
+    event,
+  });
+
+  return auditFeedState.latestSequence;
+}
+
 async function readJsonBody(req: IncomingMessage): Promise<AuditEnvelope | null> {
   const chunks: Buffer[] = [];
 
@@ -159,6 +223,22 @@ async function readJsonBody(req: IncomingMessage): Promise<AuditEnvelope | null>
   } catch {
     return null;
   }
+}
+
+function isStructuredObjectAuditEnvelope(value: unknown): value is AuditEnvelope {
+  const record = getRecord(value);
+
+  return (
+    record.source === AUDIT_EVENT_SOURCE &&
+    record.type === AUDIT_EVENT_TYPE &&
+    typeof record.payload === 'object' &&
+    record.payload !== null &&
+    !Array.isArray(record.payload)
+  );
+}
+
+function getRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function writeJson(req: IncomingMessage, res: ServerResponse, statusCode: number, body: Record<string, unknown>): void {

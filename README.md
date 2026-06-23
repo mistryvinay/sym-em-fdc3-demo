@@ -9,6 +9,7 @@ If you only remember one thing, remember this:
 
 - `4000` = host page
 - `4001` = extension app
+- `4001/action-intents` = local one-time action-token minting service
 - `4001/audit` + `4001/audit-feed` = local audit write/read service owned by the extension app
 
 ## What this demo does
@@ -55,6 +56,7 @@ That serves:
 
 - `https://localhost:4001/bundle.json`
 - `https://localhost:4001/controller.html`
+- `https://localhost:4001/action-intents`
 - `https://localhost:4001/audit`
 - `https://localhost:4001/audit-feed`
 
@@ -74,7 +76,7 @@ From the repository root:
 npm test
 ```
 
-This covers the message payload builder and the audit replay helper logic without needing a live Symphony session.
+This covers the message payload builder, one-time action intent rules, and the audit replay helper logic without needing a live Symphony session.
 
 ### 4. Load chat in the host page
 
@@ -129,10 +131,12 @@ This is the simplest possible end-to-end flow:
 6. Click `Load Chat`.
 7. Confirm the `Active Chat` panel loads the target stream.
 8. Click a row in `Payment Exceptions`, or tick multiple checkboxes and click `Send selected`.
-9. Confirm a message appears in chat with the structured-object action card.
-10. Click an action button in chat.
-11. Confirm the extension controller logs `structured-object.action.audit`.
-12. If an Audit Feed URL is configured, confirm the web page records `structured-object.action.audit.received` followed by `audit.state.changed`.
+9. Confirm the dashboard logs `message.security.intents.created`.
+10. Confirm a message appears in chat with the structured-object action card.
+11. Click an action button in chat.
+12. Confirm the extension controller logs `structured-object.action.audit`.
+13. Click the other action for the same exception and confirm the local audit service returns `already_actioned`.
+14. If an Audit Feed URL is configured, confirm the web page records `structured-object.action.audit.received` followed by `audit.state.changed`.
 
 ## Required wiring before buttons can be used
 
@@ -149,7 +153,8 @@ Treat this as a preflight checklist.
 | Message wiring | The message contains a bold visible title line for composer/send compatibility, an entity placeholder with matching `data-entity-id`, and a `fdc3.symphonyEntity` whose nested data `type` matches the controller payload type | The structured-object action card appears in chat |
 | App loaded | The `Treasury Exceptions` item appears in Symphony left navigation | Clicking it logs `structured-object.controller.loaded` |
 | Renderer wiring | The sideloaded extension registers through `ADK.messages.registerRenderer` | Clicking a button logs `structured-object.action.audit` in the controller console |
-| Audit endpoint | Local dev defaults `auditEndpointUrl` in `controller.config.json` to `https://localhost:4001/audit`; production deployments can replace it with a backend service | Button clicks are POSTed to the extension-owned local audit endpoint or the customer backend |
+| Action intent endpoint | The host page can POST to `https://localhost:4001/action-intents` before sending the Symphony message | The dashboard logs `message.security.intents.created`; if this fails the message is not sent |
+| Audit endpoint | Local dev defaults `auditEndpointUrl` in `controller.config.json` to `https://localhost:4001/audit`; production deployments can replace it with a backend service | Button clicks are POSTed with an action intent token; first click returns `202`, later clicks for the same exception return `409` |
 | Audit feed | The host page defaults to `https://localhost:4001/audit-feed` for local dev and can be pointed at a backend feed in production | `Structured Object Audit Trail` shows `structured-object.action.audit.received` followed by `audit.state.changed` |
 
 If one row in this table is not true, fix that row first before debugging anything deeper.
@@ -194,15 +199,17 @@ The runtime flow is simple:
 6. The extension adds the `Treasury Exceptions` left-nav item as a loaded indicator.
 7. The user clicks one payment exception row or selects multiple rows and clicks `Send selected`.
 8. The host builds a SharedMessage with a single bold visible title line and a `fdc3.symphonyEntity` payload whose `data.items` array contains the selected exception rows and whose `origin` object records the intended stream id, host page, local message id, and send time.
-9. The message is sent into the active stream.
-10. Symphony invokes the extension renderer, which starts directly with the exception table and native action buttons in chat.
-11. Clicking a button calls the ADK renderer action callback.
-12. The extension creates an audit event with action, exception, message/entity ids, origin stream metadata, duplicate status, and best-effort Symphony user identity from ADK startup.
-13. The extension best-effort posts that event to the current Symphony window for local diagnostics.
-14. If `auditEndpointUrl` is configured, the extension also POSTs the event to the audit service.
-15. In local development, that audit service is built into the extension app at `https://localhost:4001/audit`.
-16. If the host page has an Audit Feed URL, it polls the feed and renders `structured-object.action.audit.received`, then updates its in-memory state and renders `audit.state.changed`.
-17. The dashboard correlates the inbound action event back to the original `hostMessageId` delivery record so the audit trail can show both the local host message id and the returned Symphony message id.
+9. Before sending, the host POSTs the draft action list to `https://localhost:4001/action-intents`.
+10. The local action service returns one opaque, 24-hour, one-time action token per message exception.
+11. The host attaches those tokens to the static structured-object action data, redacts tokens from dashboard logs, and sends the message into the active stream.
+12. Symphony invokes the extension renderer, which starts directly with the exception table and native action buttons in chat.
+13. Clicking a button calls the ADK renderer action callback.
+14. The extension creates a sanitized diagnostic audit event with action, exception, message/entity ids, origin stream metadata, client duplicate status, and best-effort Symphony user identity from ADK startup.
+15. The extension best-effort posts the sanitized event to the current Symphony window for local diagnostics.
+16. If `auditEndpointUrl` is configured, the extension POSTs the action token only to that audit service.
+17. In local development, `https://localhost:4001/audit` validates the token, consumes it once, and stores only a sanitized audit event for replay.
+18. If the host page has an Audit Feed URL, it polls the feed and renders `structured-object.action.audit.received`, then updates its in-memory state and renders `audit.state.changed`.
+19. The dashboard correlates the inbound action event back to the original `hostMessageId` delivery record so the audit trail can show both the local host message id and the returned Symphony message id.
 
 The structured object payload uses `recommendedAction` to describe the suggested operational next step for an exception. The audit event `action` field remains the source of truth for what the user actually clicked.
 
@@ -220,7 +227,7 @@ Local development defaults [extension-app/controller.config.json](extension-app/
 }
 ```
 
-That lets the extension app accept action-audit writes on `https://localhost:4001/audit` and replay them from `https://localhost:4001/audit-feed` without coupling that logic to the dashboard.
+That lets the extension app mint local action intents on `https://localhost:4001/action-intents`, accept action-audit writes on `https://localhost:4001/audit`, and replay sanitized events from `https://localhost:4001/audit-feed` without coupling that logic to the dashboard.
 
 For production, configure [extension-app/controller.config.json](extension-app/controller.config.json) like this instead:
 
@@ -232,7 +239,44 @@ For production, configure [extension-app/controller.config.json](extension-app/c
 }
 ```
 
-The extension POSTs a versioned audit envelope to that endpoint:
+The host must create action intents before sending the Symphony message. The local demo request is:
+
+```json
+{
+  "messageId": "treasury-PAY-10482-...",
+  "entityId": "treasury-PAY-10482-...-structured-object",
+  "origin": {
+    "streamId": "stream-id",
+    "hostPage": "https://localhost:4000/"
+  },
+  "actions": [
+    {
+      "actionId": "acknowledge-PAY-10482",
+      "action": "acknowledge",
+      "label": "Acknowledge",
+      "exceptionId": "PAY-10482"
+    }
+  ]
+}
+```
+
+The local response contains one token per exception. In production, store only a hash of the token server-side:
+
+```json
+{
+  "expiresAt": "2026-06-24T10:00:00.000Z",
+  "intents": [
+    {
+      "exceptionId": "PAY-10482",
+      "actionIntentId": "intent-id",
+      "actionToken": "opaque-random-token",
+      "allowedActionIds": ["acknowledge-PAY-10482", "escalate-PAY-10482"]
+    }
+  ]
+}
+```
+
+The extension POSTs a versioned audit envelope to the action endpoint:
 
 ```json
 {
@@ -244,6 +288,8 @@ The extension POSTs a versioned audit envelope to that endpoint:
     "auditKey": "hostMessageId:exceptionId:actionId",
     "status": "accepted",
     "actionId": "acknowledge-PAY-10482",
+    "actionIntentId": "intent-id",
+    "actionToken": "opaque-random-token",
     "action": "acknowledge",
     "messageId": "treasury-PAY-10482-...",
     "entityId": "treasury-PAY-10482-...-structured-object",
@@ -260,6 +306,18 @@ The extension POSTs a versioned audit envelope to that endpoint:
   }
 }
 ```
+
+The endpoint must respond with:
+
+| Status | Meaning |
+| --- | --- |
+| `202` | Token was valid and consumed; action accepted |
+| `400` | Envelope or required fields are malformed |
+| `403` | Token, message, exception, or action does not match the issued intent |
+| `409` | Token was already consumed; first action already won |
+| `410` | Token exists but expired |
+
+Production services must sit behind gateway/session authentication, derive the actor server-side, hash tokens at rest, redact tokens from logs and feeds, and consume tokens inside a durable transaction or unique constraint on `messageId + exceptionId`. CORS and `Origin` checks are useful defense-in-depth only; they are not proof of a genuine click.
 
 For the demo host page to show inbound action events, provide an Audit Feed URL that returns:
 
@@ -291,4 +349,5 @@ If the configured Audit Feed URL responds with non-JSON content such as the dash
 - The sample does not create streams for you.
 - Audit state is kept in the web page memory for the demo and is lost on reload.
 - Direct `postMessage` from the extension to the host page is diagnostic only; production action audit requires a backend endpoint.
-- Duplicate action clicks are ignored by the extension audit processor, but the original chat message is not mutated or visually disabled.
+- The local demo stores action intents in memory; restarting the extension app invalidates outstanding buttons.
+- Duplicate action clicks are enforced by the audit endpoint, but the original chat message is not mutated or visually disabled.

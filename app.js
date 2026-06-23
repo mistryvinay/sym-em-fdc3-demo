@@ -2,7 +2,10 @@ import { EXCEPTIONS } from "./demo-data.js";
 import {
   buildSymphonyMessage,
   buildSymphonyBatchMessage,
-  buildSendOptions
+  buildSendOptions,
+  buildActionIntentRequest,
+  attachActionIntentsToMessage,
+  redactActionTokens
 } from "./message-builder.js";
 import {
   ensureSdkScript,
@@ -24,6 +27,7 @@ const CHAT_CONTAINER_SELECTOR = `#${CHAT_CONTAINER_ID}`;
 const AUDIT_EVENT_SOURCE = "sym-em-structured-object-extension";
 const AUDIT_EVENT_TYPE = "structured-object.action.audit";
 const EXTENSION_APP_ORIGIN = "https://localhost:4001";
+const EXTENSION_ACTION_INTENTS_URL = `${EXTENSION_APP_ORIGIN}/action-intents`;
 const EXTENSION_AUDIT_FEED_URL = `${EXTENSION_APP_ORIGIN}/audit-feed`;
 const TRUSTED_AUDIT_ORIGINS = new Set([EXTENSION_APP_ORIGIN]);
 
@@ -266,24 +270,68 @@ async function sendRows(rows, preparedEventType) {
   const payload = rows.length === 1
     ? buildSymphonyMessage(rows[0], origin)
     : buildSymphonyBatchMessage(rows, origin);
+
+  if (!canUseSymphony()) {
+    logEvent("message.skipped", {
+      reason: "Load the Symphony Embedded Mode SDK before sending a row to chat.",
+      messageId: payload.metadata.messageId
+    });
+    return;
+  }
+
+  try {
+    await secureMessageActions(payload);
+  } catch (error) {
+    logEvent("message.security.failed", {
+      messageId: payload.metadata.messageId,
+      reason: error.message
+    });
+    return;
+  }
+
   const preparedPayload = {
     messageId: payload.metadata.messageId,
-    message: payload.message,
+    message: redactActionTokens(payload.message),
     options
   };
 
   logEvent(preparedEventType, preparedPayload);
 
-  if (canUseSymphony()) {
-    const result = await sendWithSymphony(payload.message, options);
-    recordMessageDelivery(payload.metadata, result, origin);
-    return;
+  const result = await sendWithSymphony(payload.message, options);
+  recordMessageDelivery(payload.metadata, result, origin);
+}
+
+async function secureMessageActions(payload) {
+  const request = buildActionIntentRequest(payload);
+  const response = await fetch(EXTENSION_ACTION_INTENTS_URL, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify(request)
+  });
+  const responseBody = await readJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(responseBody?.reason || responseBody?.error || `Action intent service returned ${response.status}.`);
   }
 
-  logEvent("message.skipped", {
-    reason: "Load the Symphony Embedded Mode SDK before sending a row to chat.",
-    messageId: payload.metadata.messageId
+  attachActionIntentsToMessage(payload, responseBody);
+  logEvent("message.security.intents.created", {
+    messageId: payload.metadata.messageId,
+    intentCount: Array.isArray(responseBody?.intents) ? responseBody.intents.length : 0,
+    expiresAt: responseBody?.expiresAt || null
   });
+}
+
+async function readJsonResponse(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
 function buildStructuredObjectOrigin(options) {
