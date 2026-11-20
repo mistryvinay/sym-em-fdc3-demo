@@ -1,5 +1,7 @@
 # Symphony Embedded Mode Structured Objects Demo
 
+For native FDC3 actions that open desktop apps, use the [Native FDC3 action buttons demo](examples/native-fdc3-action-buttons/README.md).
+
 This repository has two moving parts:
 
 - A static host page at `https://localhost:4000` that loads Symphony Embedded Mode and sends demo messages.

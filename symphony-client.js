@@ -46,6 +46,7 @@ export async function renderEmbeddedChat({
   containerId,
   containerSelector,
   containerElement,
+  allowedApps,
   state,
   setLoadButtonBusy,
   setSdkStatus,
@@ -91,7 +92,7 @@ export async function renderEmbeddedChat({
       mode: themeMode,
       streamId,
       allowChatCreation: true,
-      allowedApps: "localhost-4001",
+      ...(allowedApps ? { allowedApps } : {}),
       canAddPeople: true,
       ecpLoginPopup: loginMode === "popup",
       ...CHAT_CHROME_SETTINGS

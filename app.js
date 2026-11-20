@@ -425,6 +425,7 @@ async function renderChat() {
     containerId: CHAT_CONTAINER_ID,
     containerSelector: CHAT_CONTAINER_SELECTOR,
     containerElement: elements.ecpChat,
+    allowedApps: "localhost-4001",
     state,
     setLoadButtonBusy,
     setSdkStatus,
