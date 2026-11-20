@@ -27,7 +27,7 @@ export async function ensureSdkScript({ podUrl, partnerId, state, setLoadButtonB
   script.src = `https://${podUrl}/embed/sdk.js`;
   script.setAttribute("render", "explicit");
   script.setAttribute("data-onload", "onECPSdkLoaded");
-  script.setAttribute("data-partner-id", partnerId);
+  if (partnerId) script.setAttribute("data-partner-id", partnerId);
   script.onerror = () => {
     state.loadingSdk = false;
     setLoadButtonBusy(false);
@@ -47,6 +47,7 @@ export async function renderEmbeddedChat({
   containerSelector,
   containerElement,
   allowedApps,
+  renderTimeoutMs = RENDER_TIMEOUT_MS,
   state,
   setLoadButtonBusy,
   setSdkStatus,
@@ -103,7 +104,7 @@ export async function renderEmbeddedChat({
 
     const renderResult = await withTimeout(
       window.symphony.render(containerId, ...renderArgs),
-      RENDER_TIMEOUT_MS,
+      renderTimeoutMs,
       "window.symphony.render"
     );
     throwIfSdkResultFailed(renderResult, "window.symphony.render");

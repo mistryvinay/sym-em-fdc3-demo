@@ -32,8 +32,8 @@ form.addEventListener("submit", (event) => {
   const partnerId = config.get("partnerId").trim();
   streamId = config.get("streamId").trim();
 
-  if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]+$/i.test(podUrl) || !partnerId || !streamId) {
-    setSdkStatus("Enter a pod hostname, Partner ID and Stream ID.", "error");
+  if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]+$/i.test(podUrl) || !streamId) {
+    setSdkStatus("Enter a pod hostname and Stream ID.", "error");
     return;
   }
 
@@ -58,7 +58,9 @@ async function renderChat() {
   await renderEmbeddedChat({
     streamId,
     themeMode: "light",
-    loginMode: "popup",
+    loginMode: "iframe",
+    // Allow time to complete a live sign-in or an in-frame prompt.
+    renderTimeoutMs: 120_000,
     containerId: chat.id,
     containerSelector: `#${chat.id}`,
     containerElement: chat,
