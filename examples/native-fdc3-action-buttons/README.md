@@ -12,7 +12,7 @@ Use branch `demo/native-fdc3-action-buttons`. The demo runs from the static HTTP
 | Render and click delivered buttons in Embedded Mode | Live UAT showed the delivered buttons and registered clicks for **Chart AAPL**, **View Trade**, and **Launch Blotter**. |
 | Render delivered buttons in a separate Symphony session | The same UAT messages showed plain-text labels in regular Chrome and all three buttons in the Symphony web app opened inside an FDC3 container. |
 | Route the click to a desktop agent | Browser tests exercised the demo’s `raiseIntent` call and routing outcomes with a simulated agent. The live UAT browser reported **Received · no desktop agent**. |
-| Open a receiving app with the right context | Verify this in the target desktop environment with a configured agent and a matching receiver. If recipients use the Symphony Desktop App, verify that client with its native connector as well. |
+| Open a receiving app with the right context | In Here, FINOS Workbench registered a `ViewChart` listener. The Symphony click left its received context empty. A direct Workbench raise for `ViewChart` with `fdc3.instrument` returned `ChannelError`, and the app selector showed no target. Repeat with a receiver registered for this intent and context. |
 
 The UAT results establish a working direct-send control. The original integration’s root cause and end-to-end desktop app launch still need to be verified in its environment.
 
@@ -57,6 +57,14 @@ After chat loads, the demo calls `registerInterop`. A button click in the embedd
 2. With the target app closed, click **Chart AAPL** in the delivered message. If the agent offers a choice of apps, select the chart app. Confirm that it opens and displays the chart for AAPL. Check **FDC3 events** for the routing result.
 3. For **View Trade** and **Launch Blotter**, agree on real intent names, context types, and identifiers with the receiving apps’ owners. Update [the demo definitions](messages.js) and the receivers’ App Directory entries and handlers to use the same values. [FDC3 custom intent naming and discovery](https://fdc3.finos.org/docs/2.0/intents/spec#namespaces)
 4. To test the recipient’s path, open the **same delivered message** in the Symphony web app inside an FDC3 container, or in the Symphony Desktop App with its native connector configured. Verify the button, then click **Chart AAPL** and confirm that the receiving app gets AAPL. [Symphony desktop interop configuration](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide)
+
+### Check intent delivery with FINOS Workbench
+
+1. Open [FINOS FDC3 Workbench](https://fdc3.finos.org/toolbox/fdc3-workbench/) in the same container as Symphony. Confirm that it shows the desktop agent provider. In **Intents**, add a listener for `ViewChart` and keep the Workbench tab open.
+2. Click **Chart AAPL** in the delivered Symphony message. If the agent opens a resolver, select Workbench. In Workbench, check **Listeners → Intents → ViewChart → Last received context** for `type: fdc3.instrument` and `id.ticker: AAPL`.
+3. If Workbench is missing from the resolver, check whether it is listed in the platform’s App Directory for `ViewChart` with `fdc3.instrument`. In a managed Here environment, configure the app’s **Interop Settings** and access for the test users. Use Workbench’s **Raise intent** with its AAPL instrument example to check routing independently of Symphony. [Here app interop settings](https://resources.here.io/docs/guide/admins/apps/#interop-settings) · [FDC3 App Directory](https://fdc3.finos.org/docs/2.2/app-directory/api)
+
+An open Workbench listener verifies intent delivery. To verify launch on demand, use a registered receiver that adds its intent listener on startup, close that app, and repeat the Symphony click. [FDC3 intent handling](https://fdc3.finos.org/docs/2.0/api/spec)
 
 ## Diagnose preview-only buttons
 
