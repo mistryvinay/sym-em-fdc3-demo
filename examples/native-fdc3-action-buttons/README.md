@@ -1,6 +1,6 @@
-# Symphony chat to FDC3 desktop apps
+# Symphony chat to TradingView via FDC3
 
-This demo sends Symphony chat messages with FDC3 action buttons through the Embedded Mode SDK. Use it as a direct SDK control when a button appears in the send preview but the delivered message shows raw text such as `§[View Trade](id/trade)`. It also shows what happens when someone clicks the delivered button, from the Embedded Mode callback to the desktop agent’s routing result.
+This demo sends Symphony chat messages with FDC3 action buttons through the Embedded Mode SDK. The main scenario is to click **Chart AAPL** in a delivered Symphony message and open the matching chart in TradingView through Here. Use the demo as a direct SDK control when a button appears in the send preview and the delivered message shows raw text such as `§[View Trade](id/trade)`.
 
 Use branch `demo/native-fdc3-action-buttons`. The demo runs from the static HTTPS host. Symphony provides the action button renderer and the native desktop connector, so this example requires no extension app. [Symphony desktop interop configuration](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide)
 
@@ -12,7 +12,7 @@ Use branch `demo/native-fdc3-action-buttons`. The demo runs from the static HTTP
 | Render and click delivered buttons in Embedded Mode | Live UAT showed the delivered buttons and registered clicks for **Chart AAPL**, **View Trade**, and **Launch Blotter**. |
 | Render delivered buttons in a separate Symphony session | The same UAT messages showed plain-text labels in regular Chrome and all three buttons in the Symphony web app opened inside an FDC3 container. |
 | Route the click to a desktop agent | Browser tests exercised the demo’s `raiseIntent` call and routing outcomes with a simulated agent. The live UAT browser reported **Received · no desktop agent**. |
-| Open a receiving app with the right context | In Here, FINOS Workbench registered a `ViewChart` listener. The Symphony click left its received context empty. A direct Workbench raise for `ViewChart` with `fdc3.instrument` returned `ChannelError`, and the app selector showed no target. Repeat with a receiver registered for this intent and context. |
+| Open TradingView with the right context | **Trading View Chart** opened from Here’s launcher. Here exposed no selectable receiver for `ViewChart` with `fdc3.instrument`. Clicking **Chart AAPL** in Symphony left the open chart in the background and did not reopen it after the chart tab was closed. Launch from Symphony still needs to be verified with the receiver configured. |
 
 The UAT results establish a working direct-send control. The original integration’s root cause and end-to-end desktop app launch still need to be verified in its environment.
 
@@ -51,20 +51,13 @@ await window.symphony.sendMessage({
 
 After chat loads, the demo calls `registerInterop`. A button click in the embedded chat calls back into the host page with an intent and context. The demo adds a row to **FDC3 events** and, for the demo actions listed above, calls `window.fdc3.raiseIntent(intent, context)` when a desktop agent is available. **Routed to …** shows that the agent resolved the intent to an app. Check the receiving app for the actual action and context. [Embedded Mode interop notifications](https://docs.developers.symphony.com/embedded-modules/embedded-mode/notifications#get-notified-of-interop-actions) · [FDC3 intent resolution](https://fdc3.finos.org/docs/2.0/api/ref/DesktopAgent#raiseintent)
 
-## Verify that a desktop app opens
+## Verify Symphony → TradingView in Here
 
-1. Open the demo page inside an FDC3-enabled desktop platform such as Here Core (formerly OpenFin Workspace) with FDC3 available to the host page. Configure an app in that platform’s App Directory that handles `ViewChart` with `fdc3.instrument`. An FDC3 Workbench listener can check intent receipt during setup. [Embedded Mode connector setup](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/configure-with-embedded-mode) · [Symphony connector troubleshooting](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/troubleshooting)
-2. With the target app closed, click **Chart AAPL** in the delivered message. If the agent offers a choice of apps, select the chart app. Confirm that it opens and displays the chart for AAPL. Check **FDC3 events** for the routing result.
-3. For **View Trade** and **Launch Blotter**, agree on real intent names, context types, and identifiers with the receiving apps’ owners. Update [the demo definitions](messages.js) and the receivers’ App Directory entries and handlers to use the same values. [FDC3 custom intent naming and discovery](https://fdc3.finos.org/docs/2.0/intents/spec#namespaces)
-4. To test the recipient’s path, open the **same delivered message** in the Symphony web app inside an FDC3 container, or in the Symphony Desktop App with its native connector configured. Verify the button, then click **Chart AAPL** and confirm that the receiving app gets AAPL. [Symphony desktop interop configuration](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide)
+1. Check that Here’s **Trading View Chart** app is available to the test user and advertises `ViewChart` with `fdc3.instrument` in its **Interop Settings**. The chart integration also needs to handle the intent and apply the incoming ticker. [Here app interop settings](https://resources.here.io/docs/guide/admins/apps/#interop-settings) · [FDC3 ViewChart contract](https://fdc3.finos.org/docs/2.0/intents/ref/ViewChart)
+2. Open Symphony inside the same Here workspace and find the existing **Chart AAPL** message. Hover over `$AAPL` and check for **View Instrument** if you need to confirm that interop is active in the viewing session. [Symphony desktop interop configuration](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide) · [Connector troubleshooting](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/troubleshooting)
+3. Close the test TradingView tab, then click **Chart AAPL** in Symphony. Choose **Trading View Chart** if Here shows a resolver. Confirm a new TradingView tab opens to AAPL. If TradingView already defaults to AAPL, start with a different ticker for a separate check that the incoming context changes the chart. [Here intent resolution](https://resources.here.io/docs/guide/devs/mcp-server/intents/#resolution-behavior)
 
-### Check intent delivery with FINOS Workbench
-
-1. Open [FINOS FDC3 Workbench](https://fdc3.finos.org/toolbox/fdc3-workbench/) in the same container as Symphony. Confirm that it shows the desktop agent provider. In **Intents**, add a listener for `ViewChart` and keep the Workbench tab open.
-2. Click **Chart AAPL** in the delivered Symphony message. If the agent opens a resolver, select Workbench. In Workbench, check **Listeners → Intents → ViewChart → Last received context** for `type: fdc3.instrument` and `id.ticker: AAPL`.
-3. If Workbench is missing from the resolver, check whether it is listed in the platform’s App Directory for `ViewChart` with `fdc3.instrument`. In a managed Here environment, configure the app’s **Interop Settings** and access for the test users. Use Workbench’s **Raise intent** with its AAPL instrument example to check routing independently of Symphony. [Here app interop settings](https://resources.here.io/docs/guide/admins/apps/#interop-settings) · [FDC3 App Directory](https://fdc3.finos.org/docs/2.2/app-directory/api)
-
-An open Workbench listener verifies intent delivery. To verify launch on demand, use a registered receiver that adds its intent listener on startup, close that app, and repeat the Symphony click. [FDC3 intent handling](https://fdc3.finos.org/docs/2.0/api/spec)
+**View Trade** and **Launch Blotter** remain example contracts for testing custom buttons. To route them to real apps, agree on the intent names, context types, and identifiers with the receiver owners, then update [the demo definitions](messages.js) and the receivers’ App Directory entries and handlers. [FDC3 custom intent naming and discovery](https://fdc3.finos.org/docs/2.0/intents/spec#namespaces)
 
 ## Diagnose preview-only buttons
 
