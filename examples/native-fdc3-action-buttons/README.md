@@ -19,7 +19,7 @@ Use branch `demo/native-fdc3-action-buttons`. The demo runs from the static HTTP
 
 ## Run in a browser
 
-1. From this branch, follow the root README’s [HTTPS host step](../../README.md#1-start-the-host-page-on-port-4000) and open the [native FDC3 demo](https://localhost:4000/examples/native-fdc3-action-buttons/).
+1. From this branch, follow the [HTTPS host step](../../STRUCTURED-OBJECTS.md#1-start-the-host-page-on-port-4000) and open the [native FDC3 demo](https://localhost:4000/examples/native-fdc3-action-buttons/).
 2. Enter the test pod hostname and a **Stream ID** you can access. Leave **Partner ID** blank when the UAT pod allows it. Otherwise, supply the ID for your Embedded Mode plan and use an authorized host origin. Click **Load chat** and sign in. The demo automatically registers for button clicks on plans that support the interop API. [Partner ID configuration](https://docs.developers.symphony.com/embedded-modules/embedded-mode/pricing-tiers#partner-id) · [Embedded Mode interop notifications](https://docs.developers.symphony.com/embedded-modules/embedded-mode/notifications#get-notified-of-interop-actions)
 3. Click **Send chart check** and confirm the send in Symphony. Find the message in the chat history and look for **Chart AAPL** below the cashtag. Click the delivered button and look for `ViewChart`, `fdc3.instrument`, and `AAPL` in **FDC3 events**.
 4. Click **Send trade actions** and repeat for the two custom actions. Expand **SDK diagnostics** to see the request payloads, message IDs, callback events, and routing errors.
