@@ -11,7 +11,8 @@ Use branch `demo/native-fdc3-action-buttons`. The demo runs from the static HTTP
 | Send through the Embedded Mode SDK | Live UAT sends returned message IDs for the chart and trade messages. The demo calls `window.symphony.sendMessage` directly, so it provides a control for comparing a wrapper integration. |
 | Render and click delivered buttons in Embedded Mode | Live UAT showed the delivered buttons and registered clicks for **Chart AAPL**, **View Trade**, and **Launch Blotter**. |
 | Render delivered buttons in a separate Symphony session | The same UAT messages showed plain-text labels in regular Chrome and all three buttons in the Symphony web app opened inside an FDC3 container. |
-| Route the click to a desktop agent | Browser tests exercised the demo’s `raiseIntent` call and routing outcomes with a simulated agent. The live UAT browser reported **Received · no desktop agent**. |
+| Handle desktop agent availability | Browser tests exercised the demo’s `raiseIntent` call with a simulated agent. The UAT test in regular Chrome reported **Received · no desktop agent**. |
+| Deliver a live UAT click through FINOS Sail | With the Embedded Mode demo and FINOS Workbench connected to the local Sail agent, **Chart AAPL** routed to `fdc3-workbench`. Workbench received `ViewChart` with `type: fdc3.instrument` and `id.ticker: AAPL`. |
 | Open TradingView with the right context | **Trading View Chart** opened from Here’s launcher. Here exposed no selectable receiver for `ViewChart` with `fdc3.instrument`. Clicking **Chart AAPL** in Symphony left the open chart in the background and did not reopen it after the chart tab was closed. Launch from Symphony still needs to be verified with the receiver configured. |
 
 The UAT results establish a working direct-send control. The original integration’s root cause and end-to-end desktop app launch still need to be verified in its environment.
@@ -58,6 +59,12 @@ After chat loads, the demo calls `registerInterop`. A button click in the embedd
 3. Close the test TradingView tab, then click **Chart AAPL** in Symphony. Choose **Trading View Chart** if Here shows a resolver. Confirm a new TradingView tab opens to AAPL. If TradingView already defaults to AAPL, start with a different ticker for a separate check that the incoming context changes the chart. [Here intent resolution](https://resources.here.io/docs/guide/devs/mcp-server/intents/#resolution-behavior)
 
 **View Trade** and **Launch Blotter** remain example contracts for testing custom buttons. To route them to real apps, agree on the intent names, context types, and identifiers with the receiver owners, then update [the demo definitions](messages.js) and the receivers’ App Directory entries and handlers. [FDC3 custom intent naming and discovery](https://fdc3.finos.org/docs/2.0/intents/spec#namespaces)
+
+### Optional verification with FINOS Sail
+
+In the live UAT test, the Symphony web client loaded directly in Sail and displayed the plain-text labels. The working path used the Embedded Mode demo as a Sail app. A local test adapter called FINOS `getAgent()` and supplied the returned agent to the demo’s `window.fdc3` integration. The demo’s `registerInterop` callback then forwarded the delivered button click to Sail. [Add an app to Sail](https://fdc3-sail.finos.org/docs/add-your-app/) · [Symphony Embedded Mode interop registration](https://docs.developers.symphony.com/embedded-modules/embedded-mode/notifications#get-notified-of-interop-actions)
+
+Add [FINOS FDC3 Workbench](https://fdc3.finos.org/toolbox/fdc3-workbench/) to Sail’s App Directory as a listener for `ViewChart` with `fdc3.instrument`. Open Workbench, add a `ViewChart` listener in **Intents**, and click **Chart AAPL** in the already delivered message in the Embedded Mode demo. Check **FDC3 events** for **Routed to fdc3-workbench**, then verify the ticker under **Last received context** in Workbench. This test verifies delivery to a running receiver. Opening TradingView on demand is the separate check above. [Run Sail locally](https://fdc3-sail.finos.org/docs/run-sail/)
 
 ## Diagnose preview-only buttons
 
