@@ -1,6 +1,8 @@
-# Symphony chat to TradingView via FDC3
+# Symphony chat action buttons with FDC3
 
-This demo sends Symphony chat messages with FDC3 action buttons through the Embedded Mode SDK. The main scenario is to click **Chart AAPL** in a delivered Symphony message and open the matching chart in TradingView through Here. Use the demo as a direct SDK control when a button appears in the send preview and the delivered message shows raw text such as `§[View Trade](id/trade)`.
+This demo sends Symphony chat messages with FDC3 action buttons through the Embedded Mode SDK. Live UAT verified message delivery, button rendering, and routing **Chart AAPL** through FINOS Sail to a running Workbench listener.
+
+Opening TradingView on demand in Here and identifying the original integration’s root cause are still pending. Use this demo as a direct SDK control when a button appears in the send preview and the delivered message shows raw text such as `§[View Trade](id/trade)`.
 
 Use branch `demo/native-fdc3-action-buttons`. The demo runs from the static HTTPS host. Symphony provides the action button renderer and the native desktop connector, so this example requires no extension app. [Symphony desktop interop configuration](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide)
 
@@ -14,8 +16,6 @@ Use branch `demo/native-fdc3-action-buttons`. The demo runs from the static HTTP
 | Handle desktop agent availability | Browser tests exercised the demo’s `raiseIntent` call with a simulated agent. The UAT test in regular Chrome reported **Received · no desktop agent**. |
 | Deliver a live UAT click through FINOS Sail | With the Embedded Mode demo and FINOS Workbench connected to the local Sail agent, **Chart AAPL** routed to `fdc3-workbench`. Workbench received `ViewChart` with `type: fdc3.instrument` and `id.ticker: AAPL`. |
 | Open TradingView with the right context | **Trading View Chart** opened from Here’s launcher. Here exposed no selectable receiver for `ViewChart` with `fdc3.instrument`. Clicking **Chart AAPL** in Symphony left the open chart in the background and did not reopen it after the chart tab was closed. Launch from Symphony still needs to be verified with the receiver configured. |
-
-The UAT results establish a working direct-send control. The original integration’s root cause and end-to-end desktop app launch still need to be verified in its environment.
 
 ## Run in a browser
 
