@@ -1,35 +1,72 @@
-# Native FDC3 action buttons
+# Symphony chat to FDC3 desktop apps
 
-Send FDC3 action buttons directly with the Symphony Embedded Mode SDK. The chart check tests native rendering and intent routing with a standard context. The trade message exercises two application-specific actions with synthetic IDs.
+This demo sends Symphony chat messages with FDC3 action buttons through the Embedded Mode SDK. Use it as a direct SDK control when a button appears in the send preview but the delivered message shows raw text such as `§[View Trade](id/trade)`. It also shows what happens when someone clicks the delivered button, from the Embedded Mode callback to the desktop agent’s routing result.
 
-Symphony's native desktop interop uses a built-in connector. The repository's [extension app](../../extension-app) renders custom structured objects for the treasury demo. This example uses the SDK's `fdc3.fdc3Intent` entities and leaves `allowedApps` unset. [Symphony desktop interop configuration](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide)
+Use branch `demo/native-fdc3-action-buttons`. The demo runs from the static HTTPS host. Symphony provides the action button renderer and the native desktop connector, so this example requires no extension app. [Symphony desktop interop configuration](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide)
 
-## Run the demo
+## What the demo verifies
 
-1. Run the root README's [HTTPS host step](../../README.md#1-start-the-host-page-on-port-4000) and open [the demo](https://localhost:4000/examples/native-fdc3-action-buttons/). Use an authorized host origin when supplying a Partner ID. [Partner ID configuration](https://docs.developers.symphony.com/embedded-modules/embedded-mode/pricing-tiers#partner-id)
-2. Enter the test pod hostname and an accessible test Stream ID. You can leave the Partner ID blank in UAT. To test a specific Embedded Mode plan, enter its Partner ID. Click **Load chat** and complete any sign-in prompts.
-3. Click **Send chart check** and confirm in the Symphony dialog. Compare the **Chart AAPL** control in the preview with the delivered message. Check the sender and recipient sessions independently. Hover over the actual `$AAPL` cashtag in each session and look for **View Instrument**. [Connector troubleshooting](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/troubleshooting)
-4. Click **Chart AAPL** in a session with a desktop agent and a receiver for `ViewChart` with `fdc3.instrument`. An FDC3 Workbench listener can verify receipt. Use **Register host callback** in the SDK demo to test delivery to the embedding page. This API requires a compatible Embedded Mode plan. For the host-forwarding route, enable **Forward demo clicks through host FDC3** and click again. Leave forwarding off when testing the native connector. [Embedded Mode interop notifications](https://docs.developers.symphony.com/embedded-modules/embedded-mode/notifications#get-notified-of-interop-actions)
-5. Click **Send trade actions** and test the two buttons with receivers registered for the intent and context pairs below. Use the desktop agent's App Directory to expose the handlers if the apps should launch on demand. [FDC3 intent resolution](https://fdc3.finos.org/docs/2.0/intents/spec)
+| Stage | Evidence |
+| --- | --- |
+| Send through the Embedded Mode SDK | Live UAT sends returned message IDs for the chart and trade messages. The demo calls `window.symphony.sendMessage` directly, so it provides a control for comparing a wrapper integration. |
+| Render and click delivered buttons in Embedded Mode | Live UAT showed the delivered buttons and registered clicks for **Chart AAPL**, **View Trade**, and **Launch Blotter**. |
+| Route the click to a desktop agent | Browser tests exercised the demo’s `raiseIntent` call and routing outcomes with a simulated agent. The live UAT browser reported **Received · no desktop agent**. |
+| Open a receiving app with the right context | Verify this in the target desktop environment with a configured agent and a matching receiver. Also check the same delivered message in the recipient’s standalone Symphony session if that is part of the workflow. |
 
-| Button | Intent | Context type | Synthetic identifier |
+The UAT results establish a working direct-send control. The original integration’s root cause and end-to-end desktop app launch still need to be verified in its environment.
+
+## Run in a browser
+
+1. From this branch, follow the root README’s [HTTPS host step](../../README.md#1-start-the-host-page-on-port-4000) and open the [native FDC3 demo](https://localhost:4000/examples/native-fdc3-action-buttons/).
+2. Enter the test pod hostname and a **Stream ID** you can access. Leave **Partner ID** blank when the UAT pod allows it. Otherwise, supply the ID for your Embedded Mode plan and use an authorized host origin. Click **Load chat** and sign in. The demo automatically registers for button clicks on plans that support the interop API. [Partner ID configuration](https://docs.developers.symphony.com/embedded-modules/embedded-mode/pricing-tiers#partner-id) · [Embedded Mode interop notifications](https://docs.developers.symphony.com/embedded-modules/embedded-mode/notifications#get-notified-of-interop-actions)
+3. Click **Send chart check** and confirm the send in Symphony. Find the message in the chat history and look for **Chart AAPL** below the cashtag. Click the delivered button and look for `ViewChart`, `fdc3.instrument`, and `AAPL` in **FDC3 events**.
+4. Click **Send trade actions** and repeat for the two custom actions. Expand **SDK diagnostics** to see the request payloads, message IDs, callback events, and routing errors.
+
+| Chat button | Intent | Context type | Identifier |
 | --- | --- | --- | --- |
 | Chart AAPL | `ViewChart` | `fdc3.instrument` | `ticker: AAPL` |
 | View Trade | `com.example.ViewTrade` | `com.example.trade` | `tradeId: DEMO-TRADE-001` |
 | Launch Blotter | `com.example.LaunchBlotter` | `com.example.blotter` | `blotterId: DEMO-BLOTTER-001` |
 
-The two trade contracts are examples. To connect actual apps, agree on the intent, context type and identifiers with the receiver owners, then update [messages.js](messages.js) and the receivers' handlers and App Directory entries. Where the native route needs a specific app, set the entity's `data.app` to `{ appId: "your-app-id" }`. The SDK host callback exposes `intent` and `context`. The demo's host relay uses the desktop agent's resolver. [SDK message contract](https://docs.developers.symphony.com/embedded-modules/embedded-mode/send-a-message)
+## How it works
 
-## Isolate preview-only buttons
+[The message builder](messages.js) creates a `SharedMessage`. Its Markdown contains a reference such as `§[Chart AAPL](id/chart)`. The `chart` key in `entities` defines the intent and context. [The demo page](demo.js) sends this directly to the selected stream in Blast mode with Symphony’s default confirmation dialog. [SDK send contract](https://docs.developers.symphony.com/embedded-modules/embedded-mode/send-a-message)
 
-| Observation | Next check |
+```js
+await window.symphony.sendMessage({
+  text: { "text/markdown": "**FDC3 connector check**\n\n$AAPL\n\n§[Chart AAPL](id/chart)" },
+  entities: {
+    chart: {
+      type: "fdc3.fdc3Intent",
+      data: {
+        title: "Chart AAPL",
+        intent: "ViewChart",
+        context: { type: "fdc3.instrument", id: { ticker: "AAPL" } }
+      }
+    }
+  }
+}, { mode: "blast", streamIds: [streamId] });
+```
+
+After chat loads, the demo calls `registerInterop`. A button click in the embedded chat calls back into the host page with an intent and context. The demo adds a row to **FDC3 events** and, for the demo actions listed above, calls `window.fdc3.raiseIntent(intent, context)` when a desktop agent is available. **Routed to …** shows that the agent resolved the intent to an app. Check the receiving app for the actual action and context. [Embedded Mode interop notifications](https://docs.developers.symphony.com/embedded-modules/embedded-mode/notifications#get-notified-of-interop-actions) · [FDC3 intent resolution](https://fdc3.finos.org/docs/2.0/api/ref/DesktopAgent#raiseintent)
+
+## Verify that a desktop app opens
+
+1. Open the demo page inside an FDC3-enabled desktop platform such as Here Core (formerly OpenFin Workspace) with FDC3 available to the host page. Configure an app in that platform’s App Directory that handles `ViewChart` with `fdc3.instrument`. An FDC3 Workbench listener can check intent receipt during setup. [Embedded Mode connector setup](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/configure-with-embedded-mode) · [Symphony connector troubleshooting](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/troubleshooting)
+2. With the target app closed, click **Chart AAPL** in the delivered message. If the agent offers a choice of apps, select the chart app. Confirm that it opens and displays the chart for AAPL. Check **FDC3 events** for the routing result.
+3. For **View Trade** and **Launch Blotter**, agree on real intent names, context types, and identifiers with the receiving apps’ owners. Update [the demo definitions](messages.js) and the receivers’ App Directory entries and handlers to use the same values. [FDC3 custom intent naming and discovery](https://fdc3.finos.org/docs/2.0/intents/spec#namespaces)
+4. To test the recipient’s path, open the **same delivered message** in a standalone Symphony session with its native desktop connector configured. Verify the button and receiving app there. That session routes its own clicks through its connector. [Standalone Symphony with Here Core](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/configure-here-core)
+
+## Diagnose preview-only buttons
+
+| Observation | What to check |
 | --- | --- |
-| A real cashtag has no **View Instrument** action | Check FDC3 in that Symphony session. Verify desktop agent injection into the configured Symphony Embedded Mode app or the standalone Symphony connector. For the SDK-embedded host route, verify `registerInterop` is available and test the callback after registering it. Host-page `window.fdc3` confirms access for the host page only. [Embedded Mode connector setup](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/configure-with-embedded-mode) · [Here Core native connector](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/configure-here-core) |
-| Direct SDK control succeeds and the wrapper send shows raw `§[...]` text | Compare the exact objects passed to the SDK, especially the `entities` map, entity IDs and Markdown. A valid reference looks like `§[View Trade](id/trade)`. If the displayed backslash reflects an actual character in the Markdown, remove it. Check that `container` points to the rendered ECP container if you pass it in Focus mode. |
-| Direct SDK control shows raw syntax even on an interop-enabled recipient | Use an authorized message read or MessageSent event to inspect the stored presentation and entity data. Missing action data after a direct SDK send points to the SDK/send conversion path. If the entity was stored, check the recipient renderer and connector. A native action sent via `StartChat` or a bot into the same test environment gives a separate control. [Read structured objects](https://docs.developers.symphony.com/bots/messages/overview-of-messageml/entities/structured-objects#reading-objects) · [Bot action buttons](https://docs.developers.symphony.com/bots/messages/overview-of-messageml/entities/standard-entities#fdc3-action-buttons) |
-| Button renders but clicking it fails to open an app | Verify the receiver advertises and handles the exact intent/context pair. `ViewChart` supports contexts such as `fdc3.instrument` and `fdc3.chart`. Trade records and blotters need contracts matching the destination apps. [FDC3 ViewChart](https://fdc3.finos.org/docs/2.0/intents/ref/ViewChart) |
-| SDK resolves with `messages: []` | The response contains no message IDs. Verify delivery in chat and obtain the message ID from the delivered message or an authorized event if needed for support. Capture the SDK/client versions and exact result for the synthetic test. [SDK response contract](https://docs.developers.symphony.com/embedded-modules/embedded-mode/send-a-message#returned-promise) |
+| Preview shows a button, but the delivered message shows fallback text | Open the same message in both sender and recipient sessions. Check whether each viewing session has interop available. In the demo, check the status above **FDC3 events** and look for registration errors in **SDK diagnostics**. In a native connector session, hover over the actual `$AAPL` cashtag and look for **View Instrument**. `window.fdc3` on the host page only demonstrates agent access for that page. [Connector troubleshooting](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/configuration-guide/troubleshooting) |
+| The direct SDK send works, but the wrapper shows raw `§[...]` markup | Compare the exact Markdown and `entities` passed into the SDK. Check that each reference has a matching key and that the opening parenthesis in `§[View Trade](id/trade)` has no literal backslash before it. If the wrapper supplies a Focus mode `container`, verify it targets the rendered container. If the SDK rejects the container, retry the control with the optional override omitted. |
+| The direct SDK send also shows raw markup in an interop-enabled session | Use an authorized message read or message event to inspect the delivered presentation and entity data. An absent action entity points to the send or conversion path. If the entity is stored, check rendering and interop in the viewing session. A `StartChat` or bot send can provide a separate control. [Read structured objects](https://docs.developers.symphony.com/bots/messages/overview-of-messageml/entities/structured-objects#reading-objects) · [Bot action buttons](https://docs.developers.symphony.com/bots/messages/overview-of-messageml/entities/standard-entities#fdc3-action-buttons) |
+| The SDK returns `messages: []` | The response contains no message ID. Check the conversation for delivery and obtain the ID from the delivered message or an authorized event for comparison. [SDK response contract](https://docs.developers.symphony.com/embedded-modules/embedded-mode/send-a-message#returned-promise) |
+| A delivered button is clickable, but no app opens | Check whether the click reached the host, the desktop agent is available on the route being tested, and a receiver advertises the exact intent and context type. Use `ViewChart` with `fdc3.instrument` for the chart control. [FDC3 ViewChart contract](https://fdc3.finos.org/docs/2.0/intents/ref/ViewChart) |
 
-The docs describe different entity shapes across entry points. `window.symphony.sendMessage` documents `fdc3.fdc3Intent` with nested `data`. The desktop interoperability message-format example uses `fdc3.action` with `action: "raiseIntent"` inside the FDC3 `StartChat` message. The interop notifications page links to that example for ECP buttons. Use the SDK contract for this control and report the exact SDK build if the entity disappears during send. [SDK SharedMessage](https://docs.developers.symphony.com/embedded-modules/embedded-mode/send-a-message) · [StartChat message format](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/fdc3-intents/message-format#fdc3-action-buttons)
+Use the entity shape for the API you are calling. Embedded Mode `sendMessage` uses `fdc3.fdc3Intent` with nested `data`. The FDC3 `StartChat` example uses `fdc3.action` with `action: "raiseIntent"`. [SDK SharedMessage](https://docs.developers.symphony.com/embedded-modules/embedded-mode/send-a-message) · [StartChat message format](https://docs.developers.symphony.com/embedded-modules/desktop-interoperability/fdc3-intents/message-format#fdc3-action-buttons)
 
-Run `npm test` from the repository root for payload and host relay checks. Live rendering and app launch require a test pod, a configured desktop agent and receiving apps.
+Run `npm test` from the repository root to check the payload builders and which actions the demo can forward.

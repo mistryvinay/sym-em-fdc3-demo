@@ -1,3 +1,4 @@
+import { buildSendOptions } from "../../message-builder.js";
 import { ensureSdkScript, registerGlobalSdkHook, renderEmbeddedChat } from "../../symphony-client.js";
 import { buildChartMessage, buildTradeMessage, getDemoContext } from "./messages.js";
 
@@ -8,9 +9,10 @@ const loadChat = document.querySelector("#load-chat");
 const sdkStatus = document.querySelector("#sdk-status");
 const sendChart = document.querySelector("#send-chart");
 const sendTrade = document.querySelector("#send-trade");
-const registerInterop = document.querySelector("#register-interop");
-const relay = document.querySelector("#relay");
 const actionStatus = document.querySelector("#action-status");
+const interopStatus = document.querySelector("#interop-status");
+const fdc3Events = document.querySelector("#fdc3-events");
+const noFdc3Events = document.querySelector("#no-fdc3-events");
 const diagnostics = document.querySelector("#diagnostics");
 
 const state = { sdkReady: false, loadingSdk: false, renderingSdk: false };
@@ -48,10 +50,9 @@ form.addEventListener("submit", (event) => {
 
 sendChart.addEventListener("click", () => sendMessage(buildChartMessage()));
 sendTrade.addEventListener("click", () => sendMessage(buildTradeMessage()));
-registerInterop.addEventListener("click", registerHostCallback);
 
 async function renderChat() {
-  if (!streamId) return;
+  if (!streamId || state.renderingSdk || state.sdkReady) return;
 
   setLoadButtonBusy(true);
   setSdkStatus("Opening chat…");
@@ -73,13 +74,13 @@ async function renderChat() {
 
   if (state.sdkReady) {
     const canSend = typeof window.symphony.sendMessage === "function";
-    sendChart.disabled = !canSend;
-    sendTrade.disabled = !canSend;
-    registerInterop.disabled = false;
     logEvent("Host features", {
       sendMessage: canSend,
       fdc3RaiseIntent: typeof window.fdc3?.raiseIntent === "function"
     });
+    await registerHostCallback();
+    sendChart.disabled = !canSend;
+    sendTrade.disabled = !canSend;
   }
 }
 
@@ -87,7 +88,7 @@ async function sendMessage(message) {
   sendChart.disabled = true;
   sendTrade.disabled = true;
   actionStatus.value = "Complete the send dialog in Symphony.";
-  const options = { mode: "blast", streamIds: [streamId], container: `#${chat.id}` };
+  const options = buildSendOptions({ streamId });
   logEvent("SDK request", { message, options });
 
   try {
@@ -96,7 +97,7 @@ async function sendMessage(message) {
     if (result?.error) throw result.error;
 
     actionStatus.value = result?.messages?.some((item) => item?.messageId)
-      ? "SDK returned a message ID. Verify the delivered message in chat."
+      ? "Sent. Click a button in the delivered message."
       : "SDK returned no message ID. Check chat for delivery.";
   } catch (error) {
     actionStatus.value = "Send failed. See diagnostics.";
@@ -111,47 +112,76 @@ async function registerHostCallback() {
   const sdk = window.symphony;
   const register = sdk.registerInterop ?? sdk.registerinterop;
   if (typeof register !== "function") {
-    actionStatus.value = "Host interop callback is unavailable. Check the SDK and Embedded Mode plan.";
+    interopStatus.value = "Click events are unavailable in this SDK. Check the Embedded Mode setup.";
+    logEvent("Host callback unavailable");
     return;
   }
 
-  registerInterop.disabled = true;
-  actionStatus.value = "Registering host callback…";
+  interopStatus.value = "Enabling chat button events…";
   try {
     const result = await register.call(sdk, (intent, context) => {
       void handleHostClick(intent, context);
     });
     if (result?.error) throw result.error;
 
-    relay.disabled = false;
-    actionStatus.value = "Host callback registered. Click a delivered button to test it.";
+    interopStatus.value = typeof window.fdc3?.raiseIntent === "function"
+      ? "Chat button clicks can open matching desktop apps."
+      : "Chat button clicks appear here. Opening desktop apps requires an FDC3 desktop agent.";
     logEvent("Host callback registered", result);
   } catch (error) {
-    registerInterop.disabled = false;
-    actionStatus.value = "Host callback registration failed. See diagnostics.";
+    interopStatus.value = "Couldn’t enable chat button events. See SDK diagnostics.";
     logEvent("Host callback error", serializeError(error));
   }
 }
 
 async function handleHostClick(intent, context) {
   logEvent("Host callback received", { intent, contextType: context?.type });
-  if (!relay.checked) return;
-
   const demoContext = getDemoContext(intent, context);
+  const resultCell = addFdc3Event(intent, context?.type, demoContext);
   if (!demoContext) return;
 
   const agent = window.fdc3;
   if (typeof agent?.raiseIntent !== "function") {
+    resultCell.textContent = "Received · no desktop agent";
     logEvent("Host FDC3 unavailable", { intent });
     return;
   }
 
+  resultCell.textContent = "Finding desktop app…";
   try {
     const resolution = await agent.raiseIntent(intent, demoContext);
+    const appId = resolution?.source?.appId;
+    resultCell.textContent = appId ? `Routed to ${appId}` : "Routed to desktop app";
     logEvent("Host FDC3 intent resolved", { intent, source: resolution?.source });
   } catch (error) {
+    resultCell.textContent = "Desktop routing failed";
     logEvent("Host FDC3 intent failed", { intent, ...serializeError(error) });
   }
+}
+
+function addFdc3Event(intent, contextType, demoContext) {
+  noFdc3Events.remove();
+  const row = fdc3Events.insertRow(0);
+  const now = new Date();
+  const time = document.createElement("time");
+  time.dateTime = now.toISOString();
+  time.textContent = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+  row.insertCell().append(time);
+  row.insertCell().textContent = intent || "Unknown";
+
+  const contextCell = row.insertCell();
+  contextCell.textContent = contextType || "Unknown";
+  if (demoContext) {
+    const identifier = document.createElement("span");
+    identifier.className = "event-context-id";
+    identifier.textContent = Object.values(demoContext.id).join(", ");
+    contextCell.append(identifier);
+  }
+
+  const resultCell = row.insertCell();
+  resultCell.textContent = "Received";
+  if (fdc3Events.rows.length > 20) fdc3Events.deleteRow(-1);
+  return resultCell;
 }
 
 function setLoadButtonBusy(busy) {

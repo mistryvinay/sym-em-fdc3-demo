@@ -29,7 +29,7 @@
         padding: 0;
       }
       .demo label { font-size: .9rem; font-weight: 600; }
-      .demo input:not([type="checkbox"]) {
+      .demo input {
         width: 100%;
         margin-top: 6px;
         border: 1px solid var(--line-strong);
@@ -43,14 +43,28 @@
       .demo output[data-tone="error"] { color: var(--red); }
       #action-status:not(:empty) { display: block; margin-top: 12px; }
       .setup-status { display: inline-block; margin: 0 4px; align-self: center; }
-      .relay { display: flex; align-items: center; gap: 6px; margin-top: 12px; width: fit-content; }
       .demo-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
       #native-fdc3-chat { height: 430px; }
       #native-fdc3-chat:empty { height: 0; }
       #native-fdc3-chat iframe { width: 100%; height: 100%; border: 0; }
-      pre { margin: 0; overflow: auto; max-height: 430px; font-size: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-      @media (max-width: 760px) {
+      .demo .fdc3-events-panel { display: block; }
+      #interop-status { display: block; margin-bottom: 12px; font-size: .9rem; }
+      .event-list { max-height: 320px; overflow: auto; }
+      .event-list:focus-visible { outline: 2px solid var(--line-strong); outline-offset: 2px; }
+      .event-list table { table-layout: auto; }
+      .event-list th, .event-list td { padding: 8px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+      .event-list th:nth-child(2), .event-list th:nth-child(3) { width: 26%; }
+      .event-list td { white-space: normal; }
+      .event-list tbody tr { cursor: default; }
+      .event-list tbody tr:hover { background: transparent; }
+      .event-list time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+      .event-context-id { display: block; margin-top: 2px; color: var(--muted); }
+      summary { margin-top: 16px; cursor: pointer; font-size: .9rem; }
+      pre { margin: 8px 0 0; overflow: auto; max-height: 430px; font-size: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+      @media (max-width: 880px) {
         .demo-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+      }
+      @media (max-width: 760px) {
         .demo .actions button { width: 100%; }
       }
     </style>
@@ -77,9 +91,7 @@
         <div class="actions">
           <button id="send-chart" class="primary-action" disabled>Send chart check</button>
           <button id="send-trade" class="secondary-action" disabled>Send trade actions</button>
-          <button id="register-interop" class="secondary-action" disabled>Register host callback</button>
         </div>
-        <label class="relay"><input id="relay" type="checkbox" disabled> Forward demo clicks through host FDC3</label>
         <output id="action-status" role="status"></output>
       </section>
       <div class="demo-grid">
@@ -87,9 +99,23 @@
           <h2 id="chat-title">Embedded chat</h2>
           <div id="native-fdc3-chat" class="native-fdc3-chat"></div>
         </section>
-        <section class="panel" aria-labelledby="diagnostics-title">
-          <h2 id="diagnostics-title">Diagnostics</h2>
-          <pre id="diagnostics" tabindex="0" aria-labelledby="diagnostics-title">Load chat to start.</pre>
+        <section class="panel fdc3-events-panel" aria-labelledby="fdc3-events-title">
+          <h2 id="fdc3-events-title">FDC3 events</h2>
+          <output id="interop-status" role="status">Load chat to enable button clicks.</output>
+          <div class="event-list" role="region" aria-label="Live FDC3 event history" tabindex="0">
+            <table aria-labelledby="fdc3-events-title">
+              <thead>
+                <tr><th scope="col">Time</th><th scope="col">Intent</th><th scope="col">Context</th><th scope="col">Result</th></tr>
+              </thead>
+              <tbody id="fdc3-events" aria-live="polite">
+                <tr id="no-fdc3-events"><td colspan="4">Click a button in a delivered message to see its event here.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <details>
+            <summary id="diagnostics-title">SDK diagnostics</summary>
+            <pre id="diagnostics" tabindex="0" aria-labelledby="diagnostics-title">Load chat to start.</pre>
+          </details>
         </section>
       </div>
     </main>
