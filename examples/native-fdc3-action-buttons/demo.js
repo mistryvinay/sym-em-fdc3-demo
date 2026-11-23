@@ -1,6 +1,6 @@
 import { buildSendOptions } from "../../message-builder.js";
 import { ensureSdkScript, registerGlobalSdkHook, renderEmbeddedChat } from "../../symphony-client.js";
-import { buildChartMessage, buildTradeMessage, getDemoContext } from "./messages.js";
+import { buildChartMessage, buildInstrumentMessage, getDemoContext } from "./messages.js";
 
 const chat = document.querySelector("#native-fdc3-chat");
 const form = document.querySelector("#setup");
@@ -8,7 +8,7 @@ const fields = document.querySelector("#setup-fields");
 const loadChat = document.querySelector("#load-chat");
 const sdkStatus = document.querySelector("#sdk-status");
 const sendChart = document.querySelector("#send-chart");
-const sendTrade = document.querySelector("#send-trade");
+const sendInstrument = document.querySelector("#send-instrument");
 const actionStatus = document.querySelector("#action-status");
 const interopStatus = document.querySelector("#interop-status");
 const fdc3Events = document.querySelector("#fdc3-events");
@@ -49,7 +49,7 @@ form.addEventListener("submit", (event) => {
 });
 
 sendChart.addEventListener("click", () => sendMessage(buildChartMessage()));
-sendTrade.addEventListener("click", () => sendMessage(buildTradeMessage()));
+sendInstrument.addEventListener("click", () => sendMessage(buildInstrumentMessage()));
 
 async function renderChat() {
   if (!streamId || state.renderingSdk || state.sdkReady) return;
@@ -80,13 +80,13 @@ async function renderChat() {
     });
     await registerHostCallback();
     sendChart.disabled = !canSend;
-    sendTrade.disabled = !canSend;
+    sendInstrument.disabled = !canSend;
   }
 }
 
 async function sendMessage(message) {
   sendChart.disabled = true;
-  sendTrade.disabled = true;
+  sendInstrument.disabled = true;
   actionStatus.value = "Complete the send dialog in Symphony.";
   const options = buildSendOptions({ streamId });
   logEvent("SDK request", { message, options });
@@ -104,7 +104,7 @@ async function sendMessage(message) {
     logEvent("Send error", serializeError(error));
   } finally {
     sendChart.disabled = false;
-    sendTrade.disabled = false;
+    sendInstrument.disabled = false;
   }
 }
 
