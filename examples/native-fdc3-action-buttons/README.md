@@ -44,7 +44,11 @@ flowchart TD
     E --> F["Running Workbench listener receives AAPL"]
 ```
 
-[The message builder](messages.js) creates a `SharedMessage`. Its Markdown contains a reference such as `§[Chart AAPL](id/chart)`. The `chart` key in `entities` defines the intent and context. [The demo page](demo.js) sends this directly to the selected stream in Blast mode with Symphony’s default confirmation dialog. [SDK send contract](https://docs.developers.symphony.com/embedded-modules/embedded-mode/send-a-message)
+### Message payload examples
+
+The demo sends a `SharedMessage` to the selected `streamId` in Blast mode with Symphony’s default confirmation dialog. Each Markdown button reference points to a matching key in `entities`, which supplies the button title, intent, and context. [Message builder](messages.js) · [Send code](demo.js) · [SDK send contract](https://docs.developers.symphony.com/embedded-modules/embedded-mode/send-a-message)
+
+**Send chart check** sends a single `ViewChart` button.
 
 ```js
 await window.symphony.sendMessage({
@@ -61,6 +65,37 @@ await window.symphony.sendMessage({
   }
 }, { mode: "blast", streamIds: [streamId] });
 ```
+
+**Send instrument actions** sends two buttons in one message. The `id/instrument` reference uses the `instrument` entity, and `id/orders` uses the `orders` entity. Both buttons pass the AAPL instrument. The orders app uses that instrument to look up related orders.
+
+```js
+await window.symphony.sendMessage({
+  text: {
+    "text/markdown": "**AAPL instrument actions**\n\n$AAPL\n\n" +
+      "§[View AAPL Details](id/instrument) §[View AAPL Orders](id/orders)"
+  },
+  entities: {
+    instrument: {
+      type: "fdc3.fdc3Intent",
+      data: {
+        title: "View AAPL Details",
+        intent: "ViewInstrument",
+        context: { type: "fdc3.instrument", id: { ticker: "AAPL" } }
+      }
+    },
+    orders: {
+      type: "fdc3.fdc3Intent",
+      data: {
+        title: "View AAPL Orders",
+        intent: "ViewOrders",
+        context: { type: "fdc3.instrument", id: { ticker: "AAPL" } }
+      }
+    }
+  }
+}, { mode: "blast", streamIds: [streamId] });
+```
+
+### Button click handling
 
 After chat loads, the demo calls `registerInterop`. A button click in the embedded chat calls back into the host page with an intent and context. The demo adds a row to **FDC3 events** and, for the demo actions listed above, calls `window.fdc3.raiseIntent(intent, context)` when a desktop agent is available. **Routed to …** shows that the agent resolved the intent to an app. Check the receiving app for the actual action and context. [Embedded Mode interop notifications](https://docs.developers.symphony.com/embedded-modules/embedded-mode/notifications#get-notified-of-interop-actions) · [FDC3 intent resolution](https://fdc3.finos.org/docs/2.0/api/ref/DesktopAgent#raiseintent)
 
